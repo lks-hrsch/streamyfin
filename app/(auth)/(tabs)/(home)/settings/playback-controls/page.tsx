@@ -7,6 +7,7 @@ import { MpvBufferSettings } from "@/components/settings/MpvBufferSettings";
 import { MpvVoSettings } from "@/components/settings/MpvVoSettings";
 import { PlaybackControlsSettings } from "@/components/settings/PlaybackControlsSettings";
 import { VideoPlayerSelector } from "@/components/settings/VideoPlayerSelector";
+import { isCastAvailable } from "@/packages/react-native-google-cast";
 import { ChromecastSettings } from "../../../../../../components/settings/ChromecastSettings";
 
 export default function PlaybackControlsPage() {
@@ -35,7 +36,7 @@ export default function PlaybackControlsPage() {
             <MpvVoSettings />
           </MediaProvider>
         </View>
-        {!Platform.isTV && <ChromecastSettings />}
+        {isCastAvailable && <ChromecastSettings />}
       </View>
     </ScrollView>
   );

@@ -189,12 +189,12 @@ public class BackgroundDownloaderModule: Module {
       self.stateQueue.sync {
         self.downloadActivityUIEnabled = enabled
       }
-      #if os(iOS)
+      #if os(iOS) && !targetEnvironment(macCatalyst)
         if #available(iOS 16.2, *) {
           DownloadLiveActivityController.shared.setEnabled(enabled)
         }
       #endif
-      #if os(iOS) && compiler(>=6.2)
+      #if os(iOS) && !targetEnvironment(macCatalyst) && compiler(>=6.2)
         // Turning the setting off must drop the system pill too, not just the card — finish a
         // keeper task that is already running. The transfer itself continues in the background
         // session; the process just suspends and the completion wake handles the rest.
@@ -715,7 +715,7 @@ public class BackgroundDownloaderModule: Module {
   /// used to) was the hottest cross-thread access in the module.
   private func queueDidChangeLocked() {
     taskStore.saveQueue(downloadQueue)
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
       guard #available(iOS 16.2, *) else { return }
       DownloadLiveActivityController.shared.setQueuedCount(downloadQueue.count)
     #endif
@@ -727,14 +727,14 @@ public class BackgroundDownloaderModule: Module {
   /// that survives everything: when the keeper expires (stop tap, stalled progress), the card is
   /// already live and degrades to the timer projection instead of leaving the lock screen empty.
   private func startLiveActivity(taskId: Int, metadata: DownloadActivityMetadata?) {
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
       guard #available(iOS 16.2, *), let metadata else { return }
       DownloadLiveActivityController.shared.start(taskId: taskId, metadata: metadata)
     #endif
   }
 
   private func updateLiveActivity(taskId: Int, bytesWritten: Int64, totalBytes: Int64) {
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
       guard #available(iOS 16.2, *) else { return }
       DownloadLiveActivityController.shared.update(
         taskId: taskId,
@@ -745,21 +745,21 @@ public class BackgroundDownloaderModule: Module {
   }
 
   private func finishLiveActivity(taskId: Int, state: DownloadActivityState) {
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
       guard #available(iOS 16.2, *) else { return }
       DownloadLiveActivityController.shared.finish(taskId: taskId, state: state)
     #endif
   }
 
   private func cancelLiveActivity(taskId: Int) {
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
       guard #available(iOS 16.2, *) else { return }
       DownloadLiveActivityController.shared.cancel(taskId: taskId)
     #endif
   }
 
   private func cancelAllLiveActivities() {
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
       guard #available(iOS 16.2, *) else { return }
       DownloadLiveActivityController.shared.cancelAll()
     #endif
@@ -772,7 +772,7 @@ public class BackgroundDownloaderModule: Module {
   // Wrapped like the Live Activity helpers; a no-op before iOS 26 or on older build toolchains.
 
   private func startContinuedProcessingLocked(metadata: DownloadActivityMetadata?) {
-    #if os(iOS) && compiler(>=6.2)
+    #if os(iOS) && !targetEnvironment(macCatalyst) && compiler(>=6.2)
       guard #available(iOS 26.0, *), downloadActivityUIEnabled else { return }
       // Titled as a status ("Downloading" / item name) rather than repeating the activity card's
       // title/subtitle — the pill reads as the system's task control, the card as the content,
@@ -789,7 +789,7 @@ public class BackgroundDownloaderModule: Module {
     bytesWritten: Int64,
     totalBytes: Int64
   ) {
-    #if os(iOS) && compiler(>=6.2)
+    #if os(iOS) && !targetEnvironment(macCatalyst) && compiler(>=6.2)
       guard #available(iOS 26.0, *) else { return }
       let effectiveTotal =
         totalBytes > 0
@@ -803,7 +803,7 @@ public class BackgroundDownloaderModule: Module {
   }
 
   private func finishContinuedProcessingIfIdleLocked() {
-    #if os(iOS) && compiler(>=6.2)
+    #if os(iOS) && !targetEnvironment(macCatalyst) && compiler(>=6.2)
       guard #available(iOS 26.0, *) else { return }
       guard downloadTasks.isEmpty, downloadQueue.isEmpty else { return }
       DownloadContinuedProcessingKeeper.shared.finish()
@@ -815,7 +815,7 @@ public class BackgroundDownloaderModule: Module {
   /// the persisted task store, not `getAllTasks`, so an activity whose transfer finished while the
   /// app was dead survives long enough for the queued completion callback to flip it.
   private func reconcileLiveActivitiesLocked() {
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
       guard #available(iOS 16.2, *) else { return }
       DownloadLiveActivityController.shared.reconcile(
         persistedTasks: downloadTasks.compactMapValues(\.metadata)
