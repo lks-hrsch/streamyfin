@@ -36,7 +36,7 @@ interface DownloadCardProps extends TouchableOpacityProps {
 
 export const DownloadCard = ({ process, ...props }: DownloadCardProps) => {
   const { t } = useTranslation();
-  const { cancelDownload } = useDownload();
+  const { cancelDownload, resumeDownload } = useDownload();
   const router = useRouter();
   const queryClient = useNetworkAwareQueryClient();
 
@@ -86,6 +86,7 @@ export const DownloadCard = ({ process, ...props }: DownloadCardProps) => {
   ]);
 
   const isTranscoding = process?.isTranscoding || false;
+  const isPaused = process?.status === "paused";
 
   const downloadedAmount = useMemo(() => {
     if (!process?.bytesDownloaded) return null;
@@ -137,7 +138,17 @@ export const DownloadCard = ({ process, ...props }: DownloadCardProps) => {
       )}
 
       {/* Action buttons in bottom right corner */}
-      <View className='absolute bottom-2 right-2 flex flex-row items-center z-10'>
+      <View className='absolute bottom-2 right-2 flex flex-row items-center gap-x-2 z-10'>
+        {isPaused && (
+          <TouchableOpacity
+            onPress={() => resumeDownload(process.id)}
+            accessibilityRole='button'
+            accessibilityLabel={t("home.downloads.resume_download")}
+            className='p-2 bg-neutral-800 rounded-full'
+          >
+            <Ionicons name='play' size={20} color='white' />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           onPress={() => handleDelete(process.id)}
           className='p-2 bg-neutral-800 rounded-full'
@@ -177,20 +188,17 @@ export const DownloadCard = ({ process, ...props }: DownloadCardProps) => {
               </View>
             )}
 
-            {process.retry && (
+            {isPaused && (
               <View className='bg-amber-600/20 px-2 py-0.5 rounded-md mt-1 self-start'>
                 <Text className='text-xs text-amber-400'>
-                  {t("home.downloads.reconnecting", {
-                    attempt: process.retry.attempt,
-                    max: process.retry.maxAttempts,
-                  })}
+                  {t("home.downloads.paused_waiting_for_connection")}
                 </Text>
               </View>
             )}
 
             {/* Row 1: Progress + Downloaded/Total */}
             <View className='flex flex-row items-center gap-x-2 mt-1.5'>
-              {sanitizedProgress === 0 ? (
+              {sanitizedProgress === 0 && !isPaused ? (
                 <ActivityIndicator size={"small"} color={"white"} />
               ) : (
                 <Text className='text-xs font-semibold'>
@@ -214,7 +222,7 @@ export const DownloadCard = ({ process, ...props }: DownloadCardProps) => {
                   {bytesToMB(process.speed).toFixed(2)} MB/s
                 </Text>
               )}
-              {eta && (
+              {eta && !isPaused && (
                 <Text className='text-xs text-green-400'>
                   {t("home.downloads.eta", { eta: eta })}
                 </Text>

@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import Foundation
+import Network
 import os
 
 /// Unified-log diagnostics for the background wake chain. `print` is invisible in release builds;
@@ -80,7 +81,7 @@ class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate {
       module?.handleError(
         taskId: downloadTask.taskIdentifier,
         error: NSError(
-          domain: DownloadRetryPolicy.httpErrorDomain,
+          domain: DownloadPausePolicy.httpErrorDomain,
           code: response.statusCode,
           userInfo: [
             NSLocalizedDescriptionKey: "HTTP error: \(response.statusCode)"
@@ -151,11 +152,14 @@ public class BackgroundDownloaderModule: Module {
   private var lastProgressLogTime = Date.distantPast
   private let taskStore = DownloadTaskStore()
   /// Tasks cancelled through our own cancel functions. Their cancellation error must end the
-  /// download; any other failure of a known task goes through `DownloadRetryPolicy` first.
+  /// download; any other failure of a known task goes through `DownloadPausePolicy` first.
   private var userCancelledTaskIds: Set<Int> = []
   /// How long a restored task the session no longer lists gets to have its completion or failure
   /// delivered before it is treated as lost with the previous process and restarted.
   private static let orphanSweepDelay: TimeInterval = 30
+  /// Resumes paused downloads when the network changes: a connection coming back, or a VPN
+  /// tunnel coming up, which changes the path without changing whether there is one.
+  private var pathMonitor: NWPathMonitor?
 
   /// Mirrors `downloadTasks` into the App Group so a transfer that finishes after the app is
   /// terminated can still be resolved when iOS relaunches us.
@@ -171,7 +175,8 @@ public class BackgroundDownloaderModule: Module {
       "onDownloadComplete",
       "onDownloadError",
       "onDownloadStarted",
-      "onDownloadRetrying"
+      "onDownloadPaused",
+      "onDownloadResumed"
     )
 
     OnCreate {
@@ -185,6 +190,7 @@ public class BackgroundDownloaderModule: Module {
         )
         self.initializeSessionLocked()
         self.scheduleOrphanSweepLocked()
+        self.startPathMonitorLocked()
         self.reconcileLiveActivitiesLocked()
         self.queueDidChangeLocked()
         // Re-arm a queue that outlived its process. No-op while a restored task is still
@@ -192,6 +198,27 @@ public class BackgroundDownloaderModule: Module {
         // delivers its cancellation error shortly after reconnecting, and handleError advances
         // the queue from there.
         self.processNextInQueueSafelyLocked()
+      }
+    }
+
+    OnDestroy {
+      self.stateQueue.sync {
+        self.pathMonitor?.cancel()
+        self.pathMonitor = nil
+      }
+    }
+
+    // Coming back to the app is the moment to see whether a server that answered with an error
+    // (and so changed nothing about the network) is reachable again.
+    OnAppEntersForeground {
+      self.stateQueue.async {
+        self.resumePausedDownloadsLocked(reason: "foreground")
+      }
+    }
+
+    Function("resumeDownload") { (taskId: Int) in
+      self.stateQueue.async {
+        self.resumeLocked(taskId: taskId, reason: "user")
       }
     }
 
@@ -279,9 +306,10 @@ public class BackgroundDownloaderModule: Module {
           liveTask.cancel()
         }
         self.stateQueue.async {
-          // Dropped even without a live task: a restored task awaiting the orphan sweep would
-          // otherwise be restarted after the user cancelled it.
-          guard self.downloadTasks.removeValue(forKey: taskId) != nil else { return }
+          // Dropped even without a live task: a paused download has none, and a restored task
+          // awaiting the orphan sweep would otherwise be restarted after the user cancelled it.
+          guard let removed = self.downloadTasks.removeValue(forKey: taskId) else { return }
+          DownloadResumeData.remove(removed.resumeDataFileName)
           self.persistTasksLocked()
           if liveTask == nil {
             // No cancellation callback will come to advance the queue.
@@ -318,6 +346,9 @@ public class BackgroundDownloaderModule: Module {
           task.cancel()
         }
         self.stateQueue.async {
+          for info in self.downloadTasks.values {
+            DownloadResumeData.remove(info.resumeDataFileName)
+          }
           self.downloadTasks.removeAll()
           self.persistTasksLocked()
           self.finishContinuedProcessingIfIdleLocked()
@@ -358,7 +389,7 @@ public class BackgroundDownloaderModule: Module {
             var entry: [String: Any] = [
               "taskId": taskId,
               "url": info.url,
-              "state": "running"
+              "state": info.pausedAt == nil ? "running" : "paused"
             ]
             if let itemId = info.metadata?.itemId {
               entry["itemId"] = itemId
@@ -377,9 +408,9 @@ public class BackgroundDownloaderModule: Module {
             return runningEntry(task.taskIdentifier, info)
           }
 
-          // A persisted task the session no longer lists is not lost: its completion or failure is
-          // still being delivered, or the orphan sweep is about to restart it. Either way native
-          // still owns it, and reporting it missing would make JS drop or duplicate the download.
+          // A persisted task the session no longer lists is not lost: it is paused, its completion
+          // or failure is still being delivered, or the orphan sweep is about to restart it. Either
+          // way native still owns it, and reporting it missing would make JS drop or duplicate it.
           let liveIds = Set(tasks.map(\.taskIdentifier))
           let unresolvedDownloads = tasksSnapshot
             .filter { !liveIds.contains($0.key) }
@@ -514,20 +545,12 @@ public class BackgroundDownloaderModule: Module {
     isSuccessResponse: Bool
   ) {
     // An error response (a gateway's 403 page) streams a body too. It is not the download and ends
-    // in a failure moment later, so it must neither show up as progress nor refill the retry budget
-    // it is draining.
+    // in a failure moment later, so it must not show up as progress.
     guard isSuccessResponse else { return }
 
     let progress = totalBytes > 0
       ? Double(bytesWritten) / Double(totalBytes)
       : 0.0
-
-    // Media flowing again ends the failure streak, so the budget only ever measures one outage.
-    if downloadTasks[taskId]?.retryAttempt != nil {
-      downloadTasks[taskId]?.retryAttempt = nil
-      persistTasksLocked()
-      backgroundDownloaderLog.notice("Task \(taskId) recovered; retry budget reset")
-    }
 
     // Fed every callback, not just the throttled ones — the controller does its own rate limiting
     // and wants the finer samples for its speed average.
@@ -600,7 +623,7 @@ public class BackgroundDownloaderModule: Module {
       handleErrorLocked(
         taskId: taskId,
         error: NSError(
-          domain: DownloadRetryPolicy.httpErrorDomain,
+          domain: DownloadPausePolicy.httpErrorDomain,
           code: httpResponse.statusCode,
           userInfo: [
             NSLocalizedDescriptionKey: "Server responded with HTTP \(httpResponse.statusCode)"
@@ -687,15 +710,17 @@ public class BackgroundDownloaderModule: Module {
     let cancelledByUs = userCancelledTaskIds.remove(taskId) != nil
     let itemId = downloadTasks[taskId]?.metadata?.itemId
 
-    if !cancelledByUs, let info = downloadTasks[taskId], DownloadRetryPolicy.isTransient(nsError) {
-      if scheduleRetryLocked(failedTaskId: taskId, info: info, error: nsError) {
-        return
-      }
-      backgroundDownloaderLog.error("Task \(taskId) out of retries; reporting failure")
+    // Only the downloads JS follows by item (videos, enqueued with metadata) pause. The music
+    // cache follows its own by task id, which going on under a new task would break, and a pause
+    // of one of those would hold the video queue's slot for nothing.
+    if !cancelledByUs, let info = downloadTasks[taskId], info.metadata != nil,
+      DownloadPausePolicy.shouldPause(nsError)
+    {
+      pauseLocked(taskId: taskId, info: info, error: nsError)
+      return
     }
 
-    // A cancel the system issued carries a reason and, once out of retries, is a real failure the
-    // user has to hear about. Only our own cancels (or reasonless ones) end silently.
+    // Only our own cancels (or reasonless ones) end silently.
     let isPlainCancel = nsError.domain == NSURLErrorDomain
       && nsError.code == NSURLErrorCancelled
       && nsError.userInfo[NSURLErrorBackgroundTaskCancelledReasonKey] == nil
@@ -726,89 +751,134 @@ public class BackgroundDownloaderModule: Module {
     processNextInQueueSafelyLocked()
   }
 
-  /// Replaces a failed task with a new attempt that the session starts after the policy's backoff.
-  /// Returns false when the budget is spent or no task could be created.
-  ///
-  /// The backoff rides on `earliestBeginDate` rather than a timer: the session schedules the
-  /// attempt itself, so it fires even while the app is suspended, and a background session waits
-  /// for connectivity on its own once the attempt is due. The failed task's slot stays occupied
-  /// meanwhile, which is what parks the queue instead of failing every item behind it in turn.
-  private func scheduleRetryLocked(failedTaskId: Int, info: DownloadTaskInfo, error: NSError) -> Bool {
-    let attempt = (info.retryAttempt ?? 0) + 1
-    guard DownloadRetryPolicy.shouldRetry(attempt: attempt) else { return false }
+  /// Parks an interrupted download until it is resumed. Its task is gone; the entry stays, keyed
+  /// by that task's id, so it keeps its place: the queue behind it waits instead of failing every
+  /// item in turn into the same outage.
+  private func pauseLocked(taskId: Int, info: DownloadTaskInfo, error: NSError) {
+    // Resume data exists when the server supports range requests (direct file downloads); the
+    // download then goes on where it stopped. Transcoded streams have none and start over.
+    let resumeData = error.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+    var paused = info
+    paused.pausedAt = Date()
+    DownloadResumeData.remove(paused.resumeDataFileName)
+    paused.resumeDataFileName = resumeData.flatMap(DownloadResumeData.save)
+    downloadTasks[taskId] = paused
+    lastProgressTime.removeValue(forKey: taskId)
+    persistTasksLocked()
+
+    backgroundDownloaderLog.notice(
+      "Task \(taskId) paused (\(error.domain, privacy: .public) \(error.code)), resumable: \(paused.resumeDataFileName != nil)"
+    )
+
+    // The waiting state, rather than flashing the download as failed.
+    finishLiveActivity(taskId: taskId, state: .queued)
+    finishContinuedProcessingIfIdleLocked()
+
+    var payload: [String: Any] = [
+      "taskId": taskId,
+      "error": error.localizedDescription,
+      "resumable": paused.resumeDataFileName != nil
+    ]
+    if let itemId = info.metadata?.itemId {
+      payload["itemId"] = itemId
+    }
+    sendEvent("onDownloadPaused", payload)
+  }
+
+  /// Starts a paused download again under a new task. When the network is still down the session
+  /// holds the task until it is back; when the server still refuses it, it pauses again.
+  private func resumeLocked(taskId: Int, reason: String) {
+    guard let info = downloadTasks[taskId], info.pausedAt != nil else { return }
 
     if session == nil {
       initializeSessionLocked()
     }
-    guard let session else { return false }
+    guard let session else { return }
 
-    // Resume data exists when the server supports range requests (direct file downloads); the
-    // attempt then continues where the transfer stopped. Transcoded streams have none and restart.
-    let resumeData = error.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+    let resumeData = info.resumeDataFileName.flatMap(DownloadResumeData.load)
     let task: URLSessionDownloadTask
     if let resumeData {
       task = session.downloadTask(withResumeData: resumeData)
     } else if let request = makeRequest(urlString: info.url, headers: info.headers) {
       task = session.downloadTask(with: request)
     } else {
-      return false
+      return
     }
 
-    let delay = DownloadRetryPolicy.delay(forAttempt: attempt)
-    let retryAt = Date().addingTimeInterval(delay)
-    task.earliestBeginDate = retryAt
-
-    var retried = info
-    retried.retryAttempt = attempt
-    downloadTasks.removeValue(forKey: failedTaskId)
-    lastProgressTime.removeValue(forKey: failedTaskId)
-    downloadTasks[task.taskIdentifier] = retried
+    var resumed = info
+    resumed.pausedAt = nil
+    resumed.resumeDataFileName = nil
+    DownloadResumeData.remove(info.resumeDataFileName)
+    downloadTasks.removeValue(forKey: taskId)
+    downloadTasks[task.taskIdentifier] = resumed
     persistTasksLocked()
     task.resume()
 
     backgroundDownloaderLog.notice(
-      "Task \(failedTaskId) failed (\(error.domain, privacy: .public) \(error.code)); attempt \(attempt) as task \(task.taskIdentifier) in \(Int(delay))s, resuming: \(resumeData != nil)"
+      "Task \(taskId) resumed (\(reason, privacy: .public)) as task \(task.taskIdentifier), from resume data: \(resumeData != nil)"
     )
 
-    // Rebinds the existing activity to the replacement task instead of flashing it as failed.
     startLiveActivity(taskId: task.taskIdentifier, metadata: info.metadata)
+    startContinuedProcessingLocked(metadata: info.metadata)
 
     var payload: [String: Any] = [
       "taskId": task.taskIdentifier,
-      "previousTaskId": failedTaskId,
-      "attempt": attempt,
-      "maxAttempts": DownloadRetryPolicy.maxAttempts,
-      "retryAt": retryAt.timeIntervalSince1970 * 1000,
-      "resumed": resumeData != nil,
-      "error": error.localizedDescription
+      "previousTaskId": taskId,
+      "resumed": resumeData != nil
     ]
     if let itemId = info.metadata?.itemId {
       payload["itemId"] = itemId
     }
-    sendEvent("onDownloadRetrying", payload)
-    return true
+    sendEvent("onDownloadResumed", payload)
+  }
+
+  private func resumePausedDownloadsLocked(reason: String) {
+    for (taskId, info) in downloadTasks where info.pausedAt != nil {
+      resumeLocked(taskId: taskId, reason: reason)
+    }
+  }
+
+  /// Resumes paused downloads on every change of a usable network path. Also fires once when
+  /// started, which resumes what an earlier launch left paused.
+  private func startPathMonitorLocked() {
+    guard pathMonitor == nil else { return }
+    let monitor = NWPathMonitor()
+    monitor.pathUpdateHandler = { [weak self] path in
+      guard path.status == .satisfied else { return }
+      self?.stateQueue.async {
+        self?.resumePausedDownloadsLocked(reason: "network")
+      }
+    }
+    monitor.start(queue: DispatchQueue(label: "BackgroundDownloader.pathMonitor"))
+    pathMonitor = monitor
   }
 
   /// Restored tasks the session no longer lists are normally a completion or failure still waiting
   /// to be delivered. One still unresolved after `orphanSweepDelay` died with the previous process
-  /// without the system reporting it; it is failed into the retry path instead of lingering as a
-  /// download that never moves again.
+  /// without the system reporting it. That is no connection problem, so it starts again at once
+  /// rather than lingering as a download that never moves again.
   private func scheduleOrphanSweepLocked() {
-    let restoredIds = Set(downloadTasks.keys)
+    let restoredIds = Set(downloadTasks.filter { $0.value.pausedAt == nil }.keys)
     guard !restoredIds.isEmpty, let session else { return }
 
     session.getAllTasks { tasks in
       let liveIds = Set(tasks.map(\.taskIdentifier))
       self.stateQueue.asyncAfter(deadline: .now() + Self.orphanSweepDelay) {
-        for taskId in restoredIds.subtracting(liveIds) where self.downloadTasks[taskId] != nil {
-          backgroundDownloaderLog.notice("Restored task \(taskId) was never resolved; restarting")
-          self.handleErrorLocked(
-            taskId: taskId,
-            error: NSError(
-              domain: NSURLErrorDomain,
-              code: NSURLErrorBackgroundSessionWasDisconnected
+        for taskId in restoredIds.subtracting(liveIds) {
+          guard let info = self.downloadTasks[taskId], info.pausedAt == nil else { continue }
+          guard info.metadata != nil else {
+            // A music cache download, followed by task id: reported failed, as before.
+            self.handleErrorLocked(
+              taskId: taskId,
+              error: NSError(domain: NSURLErrorDomain, code: NSURLErrorBackgroundSessionWasDisconnected)
             )
-          )
+            continue
+          }
+          backgroundDownloaderLog.notice("Restored task \(taskId) was never resolved; restarting")
+          var restarted = info
+          restarted.pausedAt = Date()
+          self.downloadTasks[taskId] = restarted
+          self.resumeLocked(taskId: taskId, reason: "orphan")
         }
       }
     }
@@ -961,7 +1031,10 @@ public class BackgroundDownloaderModule: Module {
   private func finishContinuedProcessingIfIdleLocked() {
     #if os(iOS) && compiler(>=6.2)
       guard #available(iOS 26.0, *) else { return }
-      guard downloadTasks.isEmpty, downloadQueue.isEmpty else { return }
+      // Nothing transfers while every task is paused, and the queue waits behind them.
+      guard !downloadTasks.values.contains(where: { $0.pausedAt == nil }),
+        downloadQueue.isEmpty || !downloadTasks.isEmpty
+      else { return }
       DownloadContinuedProcessingKeeper.shared.finish()
     #endif
   }

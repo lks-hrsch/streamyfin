@@ -5,8 +5,9 @@ import type {
   DownloadActivityMetadata,
   DownloadCompleteEvent,
   DownloadErrorEvent,
+  DownloadPausedEvent,
   DownloadProgressEvent,
-  DownloadRetryingEvent,
+  DownloadResumedEvent,
   DownloadStartedEvent,
 } from "./src/BackgroundDownloader.types";
 import BackgroundDownloaderModule from "./src/BackgroundDownloaderModule";
@@ -30,6 +31,8 @@ export interface BackgroundDownloader {
     headers?: Record<string, string>,
   ): Promise<number>;
   cancelDownload(taskId: number): void;
+  /** iOS only; no-op elsewhere. Starts a paused download again. */
+  resumeDownload(taskId: number): void;
   cancelQueuedDownload(url: string): void;
   cancelAllDownloads(): void;
   getActiveDownloads(): Promise<ActiveDownload[]>;
@@ -61,8 +64,13 @@ export interface BackgroundDownloader {
   ): EventSubscription;
 
   /** iOS only; Android never emits it. */
-  addRetryingListener(
-    listener: (event: DownloadRetryingEvent) => void,
+  addPausedListener(
+    listener: (event: DownloadPausedEvent) => void,
+  ): EventSubscription;
+
+  /** iOS only; Android never emits it. */
+  addResumedListener(
+    listener: (event: DownloadResumedEvent) => void,
   ): EventSubscription;
 }
 
@@ -107,6 +115,11 @@ const BackgroundDownloader: BackgroundDownloader = {
 
   cancelDownload(taskId: number): void {
     BackgroundDownloaderModule.cancelDownload(taskId);
+  },
+
+  resumeDownload(taskId: number): void {
+    if (Platform.OS !== "ios") return;
+    BackgroundDownloaderModule.resumeDownload?.(taskId);
   },
 
   cancelQueuedDownload(url: string): void {
@@ -154,11 +167,17 @@ const BackgroundDownloader: BackgroundDownloader = {
     );
   },
 
-  addRetryingListener(
-    listener: (event: DownloadRetryingEvent) => void,
+  addPausedListener(
+    listener: (event: DownloadPausedEvent) => void,
+  ): EventSubscription {
+    return BackgroundDownloaderModule.addListener("onDownloadPaused", listener);
+  },
+
+  addResumedListener(
+    listener: (event: DownloadResumedEvent) => void,
   ): EventSubscription {
     return BackgroundDownloaderModule.addListener(
-      "onDownloadRetrying",
+      "onDownloadResumed",
       listener,
     );
   },
@@ -171,7 +190,8 @@ export type {
   DownloadActivityMetadata,
   DownloadCompleteEvent,
   DownloadErrorEvent,
+  DownloadPausedEvent,
   DownloadProgressEvent,
-  DownloadRetryingEvent,
+  DownloadResumedEvent,
   DownloadStartedEvent,
 };

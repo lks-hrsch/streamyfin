@@ -320,8 +320,8 @@ export function useDownloadOperations({
 
       const record = getPendingDownload(id);
 
-      if (record?.status === "downloading" && record.taskId !== undefined) {
-        // Cancel active download by taskId
+      if (record?.status !== "queued" && record?.taskId !== undefined) {
+        // Cancel an active or paused download by taskId
         BackgroundDownloader.cancelDownload(record.taskId);
       } else if (record) {
         // Still queued natively — cancel by URL
@@ -486,9 +486,19 @@ export function useDownloadOperations({
     }
   }, [processes]);
 
+  // The card's resume button. Native answers with the resumed event, which moves the record and
+  // the card back to downloading.
+  const resumeDownload = useCallback((id: string) => {
+    const record = getPendingDownload(id);
+    if (record?.status === "paused" && record.taskId !== undefined) {
+      BackgroundDownloader.resumeDownload(record.taskId);
+    }
+  }, []);
+
   return {
     startBackgroundDownload,
     cancelDownload,
+    resumeDownload,
     deleteFile,
     deleteItems,
     deleteAllFiles,

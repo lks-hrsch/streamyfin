@@ -29,7 +29,7 @@ let hasReconciled = false;
 
 function jobFromRecord(
   record: PendingDownload,
-  status: "queued" | "downloading",
+  status: "queued" | "downloading" | "paused",
 ): JobStatus {
   return {
     id: record.itemId,
@@ -98,8 +98,9 @@ async function reEnqueue(
  *   process as queued; native starts it when its turn comes. Custom proxy headers don't survive
  *   that persistence, so a download that needs them is re-queued with them
  * - video file exists → the download finished while JS was dead; finalize it into the database
+ * - paused natively after an interruption (iOS) → resurrect the UI process as paused
  * - native lost it (Android process death, a failure reported while no JS was listening) →
- *   re-enqueue, up to `MAX_LOST_DOWNLOAD_REENQUEUES` times, then drop
+ *   re-enqueue
  *
  * The decision itself lives in `decideReconcileAction`.
  */
@@ -141,7 +142,6 @@ export function useDownloadReconciliation({
         // (they must not be written to the App Group container).
         const headers = getHeadersForUrl(record.inputUrl, {});
         const action = decideReconcileAction({
-          record,
           nativeTask: nativeByItemId.get(record.itemId),
           hasCompletedFile: !!file?.exists && (file.size ?? 0) > 0,
           hasPlainFileName,
@@ -153,9 +153,9 @@ export function useDownloadReconciliation({
             console.log(
               `[RECONCILE] Still ${action.status} natively: ${record.item.Name}`,
             );
-            if (action.status === "downloading") {
+            if (action.status !== "queued") {
               updatePendingDownload(record.itemId, {
-                status: "downloading",
+                status: action.status,
                 taskId: action.taskId,
               });
             }
@@ -186,7 +186,6 @@ export function useDownloadReconciliation({
             updatePendingDownload(record.itemId, {
               status: "queued",
               taskId: undefined,
-              lostReenqueues: (record.lostReenqueues ?? 0) + 1,
             });
             if (await reEnqueue(record, headers)) {
               restored.push(jobFromRecord(record, "queued"));
@@ -197,7 +196,6 @@ export function useDownloadReconciliation({
             // Kept in the log: a download the user asked for and will not get.
             writeToLog("WARN", "Lost download dropped", {
               item: record.item.Name,
-              restarts: record.lostReenqueues ?? 0,
             });
             removePendingDownload(record.itemId);
             deletePendingDownloadFiles(record);

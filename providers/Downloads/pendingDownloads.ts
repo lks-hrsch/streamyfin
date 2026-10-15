@@ -25,8 +25,11 @@ import { isPlainFileName } from "./utils";
 export interface PendingDownload {
   /** Jellyfin item id; the record key, and how native events are correlated back. */
   itemId: string;
-  /** `queued` until the native started event fires, then `downloading`. */
-  status: "queued" | "downloading";
+  /**
+   * `queued` until the native started event fires, then `downloading`; `paused` while an
+   * interrupted download waits to go on (iOS), still holding its task id.
+   */
+  status: "queued" | "downloading" | "paused";
   enqueuedAt: string;
   /** Native task id, known once the download actually starts. */
   taskId?: number;
@@ -50,8 +53,6 @@ export interface PendingDownload {
   subtitleStreamIndex?: number;
   /** Metadata originally handed to native; reused when re-enqueueing after a relaunch. */
   activityMetadata?: DownloadActivityMetadata;
-  /** How often a relaunch found native had lost this download and re-enqueued it. */
-  lostReenqueues?: number;
 }
 
 const PENDING_DOWNLOADS_KEY = "downloads.pending.v1.json";
