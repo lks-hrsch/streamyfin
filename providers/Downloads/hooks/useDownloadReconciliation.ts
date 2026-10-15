@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import type { ActiveDownload } from "@/modules";
 import { BackgroundDownloader } from "@/modules";
 import { getHeadersForUrl } from "@/utils/customHeaders";
-import { logAndCaptureError } from "@/utils/log";
+import { logAndCaptureError, writeToLog } from "@/utils/log";
 import { deletePendingDownloadFiles } from "../fileOperations";
 import {
   finalizePendingDownload,
@@ -15,6 +15,7 @@ import {
   removePendingDownload,
   updatePendingDownload,
 } from "../pendingDownloads";
+import { decideReconcileAction } from "../reconcileDecision";
 import type { JobStatus } from "../types";
 import { isPlainFileName, uriToFilePath } from "../utils";
 
@@ -96,10 +97,11 @@ async function reEnqueue(
  * - still queued natively (iOS persists its queue and re-arms it on launch) → resurrect the UI
  *   process as queued; native starts it when its turn comes. Custom proxy headers don't survive
  *   that persistence, so a download that needs them is re-queued with them
- * - never started (`queued`) and native lost it (Android process death) → re-enqueue as a backstop
  * - video file exists → the download finished while JS was dead; finalize it into the database
- * - started but no task and no file → genuinely lost (e.g. force-quit cancels background
- *   transfers); drop the record
+ * - native lost it (Android process death, a failure reported while no JS was listening) →
+ *   re-enqueue, up to `MAX_LOST_DOWNLOAD_REENQUEUES` times, then drop
+ *
+ * The decision itself lives in `decideReconcileAction`.
  */
 export function useDownloadReconciliation({
   setProcesses,
@@ -130,69 +132,77 @@ export function useDownloadReconciliation({
       const restored: JobStatus[] = [];
 
       for (const record of pending) {
-        const nativeTask = nativeByItemId.get(record.itemId);
-
-        if (nativeTask?.state === "queued") {
-          // A queued task hasn't sent its request yet, and the headers it was
-          // enqueued with are gone (they must not be written to the App Group
-          // container). Behind a gateway it would start and 403, so it is
-          // re-armed with them; without headers it can simply carry on.
-          const headers = getHeadersForUrl(record.inputUrl, {});
-          if (!headers) {
-            console.log(
-              `[RECONCILE] Still queued natively: ${record.item.Name}`,
-            );
-            restored.push(jobFromRecord(record, "queued"));
-            continue;
-          }
-
-          console.log(
-            `[RECONCILE] Re-arming queued download with headers: ${record.item.Name}`,
-          );
-          BackgroundDownloader.cancelQueuedDownload(record.inputUrl);
-          if (await reEnqueue(record, headers)) {
-            restored.push(jobFromRecord(record, "queued"));
-          }
-          continue;
-        }
-
-        if (nativeTask) {
-          console.log(`[RECONCILE] Still downloading: ${record.item.Name}`);
-          updatePendingDownload(record.itemId, {
-            status: "downloading",
-            taskId: nativeTask.taskId,
-          });
-          restored.push(jobFromRecord(record, "downloading"));
-          continue;
-        }
-
-        // A stored name with a path in it is never looked up: the record falls through and is
-        // dropped below.
-        const file = isPlainFileName(record.videoFileName)
+        // A stored name with a path in it is never looked up, nor restarted.
+        const hasPlainFileName = isPlainFileName(record.videoFileName);
+        const file = hasPlainFileName
           ? new File(Paths.document, record.videoFileName)
           : undefined;
-        if (file?.exists && (file.size ?? 0) > 0) {
-          console.log(
-            `[RECONCILE] Completed while app was dead: ${record.item.Name}`,
-          );
-          finalizePendingDownload(record, file.size ?? 0);
-          onDataChange?.();
-          continue;
-        }
+        // A queued task hasn't sent its request yet, and the headers it was enqueued with are gone
+        // (they must not be written to the App Group container).
+        const headers = getHeadersForUrl(record.inputUrl, {});
+        const action = decideReconcileAction({
+          record,
+          nativeTask: nativeByItemId.get(record.itemId),
+          hasCompletedFile: !!file?.exists && (file.size ?? 0) > 0,
+          hasPlainFileName,
+          needsHeaders: !!headers,
+        });
 
-        if (record.status === "queued") {
-          // Backstop: native lost the queued item (Android queue dies with the process; on iOS
-          // this only fires if the persisted queue failed to restore).
-          console.log(`[RECONCILE] Re-enqueueing: ${record.item.Name}`);
-          if (await reEnqueue(record, getHeadersForUrl(record.inputUrl, {}))) {
-            restored.push(jobFromRecord(record, "queued"));
-          }
-          continue;
-        }
+        switch (action.kind) {
+          case "restore":
+            console.log(
+              `[RECONCILE] Still ${action.status} natively: ${record.item.Name}`,
+            );
+            if (action.status === "downloading") {
+              updatePendingDownload(record.itemId, {
+                status: "downloading",
+                taskId: action.taskId,
+              });
+            }
+            restored.push(jobFromRecord(record, action.status));
+            break;
 
-        console.log(`[RECONCILE] Lost download dropped: ${record.item.Name}`);
-        removePendingDownload(record.itemId);
-        deletePendingDownloadFiles(record);
+          case "rearm-with-headers":
+            // Behind a gateway it would start and 403, so it is re-armed with them.
+            console.log(
+              `[RECONCILE] Re-arming queued download with headers: ${record.item.Name}`,
+            );
+            BackgroundDownloader.cancelQueuedDownload(record.inputUrl);
+            if (await reEnqueue(record, headers)) {
+              restored.push(jobFromRecord(record, "queued"));
+            }
+            break;
+
+          case "finalize":
+            console.log(
+              `[RECONCILE] Completed while app was dead: ${record.item.Name}`,
+            );
+            finalizePendingDownload(record, file?.size ?? 0);
+            onDataChange?.();
+            break;
+
+          case "re-enqueue":
+            console.log(`[RECONCILE] Re-enqueueing lost: ${record.item.Name}`);
+            updatePendingDownload(record.itemId, {
+              status: "queued",
+              taskId: undefined,
+              lostReenqueues: (record.lostReenqueues ?? 0) + 1,
+            });
+            if (await reEnqueue(record, headers)) {
+              restored.push(jobFromRecord(record, "queued"));
+            }
+            break;
+
+          case "drop":
+            // Kept in the log: a download the user asked for and will not get.
+            writeToLog("WARN", "Lost download dropped", {
+              item: record.item.Name,
+              restarts: record.lostReenqueues ?? 0,
+            });
+            removePendingDownload(record.itemId);
+            deletePendingDownloadFiles(record);
+            break;
+        }
       }
 
       if (restored.length > 0) {

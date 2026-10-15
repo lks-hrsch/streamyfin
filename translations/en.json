@@ -584,6 +584,7 @@
     "downloads": {
       "downloads_title": "Downloads",
       "transcoding": "Transcoding",
+      "reconnecting": "Connection lost, retrying ({{attempt}}/{{max}})",
       "series": "Series",
       "movies": "Movies",
       "other_media": "Other media",

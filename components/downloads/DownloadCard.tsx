@@ -177,6 +177,17 @@ export const DownloadCard = ({ process, ...props }: DownloadCardProps) => {
               </View>
             )}
 
+            {process.retry && (
+              <View className='bg-amber-600/20 px-2 py-0.5 rounded-md mt-1 self-start'>
+                <Text className='text-xs text-amber-400'>
+                  {t("home.downloads.reconnecting", {
+                    attempt: process.retry.attempt,
+                    max: process.retry.maxAttempts,
+                  })}
+                </Text>
+              </View>
+            )}
+
             {/* Row 1: Progress + Downloaded/Total */}
             <View className='flex flex-row items-center gap-x-2 mt-1.5'>
               {sanitizedProgress === 0 ? (

@@ -5,6 +5,7 @@ import type {
   DownloadCompleteEvent,
   DownloadErrorEvent,
   DownloadProgressEvent,
+  DownloadRetryingEvent,
   DownloadStartedEvent,
 } from "@/modules";
 import { BackgroundDownloader } from "@/modules";
@@ -85,6 +86,49 @@ export function useDownloadEventHandlers({
     );
 
     return () => startedSub.remove();
+  }, [updateProcess]);
+
+  // Handle retries after transient failures (iOS). The download goes on natively under a new task
+  // id, which the pending record must follow or a later cancel would target a dead task.
+  useEffect(() => {
+    const retryingSub = BackgroundDownloader.addRetryingListener(
+      (event: DownloadRetryingEvent) => {
+        const itemId = event.itemId;
+        if (!itemId) return;
+
+        if (!getPendingDownload(itemId)) {
+          // Cancelled while native was scheduling the attempt, like a start without a record.
+          BackgroundDownloader.cancelDownload(event.taskId);
+          return;
+        }
+
+        writeToLog("WARN", "Download interrupted, retrying", {
+          attempt: event.attempt,
+          resumed: event.resumed,
+          error: event.error,
+        });
+
+        updatePendingDownload(itemId, {
+          status: "downloading",
+          taskId: event.taskId,
+        });
+        // A restarted transfer counts bytes from zero again, which would read as negative speed.
+        clearSpeedData(itemId);
+        updateProcess(itemId, {
+          status: "downloading",
+          speed: undefined,
+          // Without resume data the transfer starts over.
+          ...(event.resumed ? {} : { progress: 0, bytesDownloaded: 0 }),
+          retry: {
+            attempt: event.attempt,
+            maxAttempts: event.maxAttempts,
+            retryAt: event.retryAt,
+          },
+        });
+      },
+    );
+
+    return () => retryingSub.remove();
   }, [updateProcess]);
 
   // Track last logged progress per process to avoid spam
@@ -185,6 +229,7 @@ export function useDownloadEventHandlers({
           speed,
           estimatedTotalSizeBytes: estimatedTotalBytes,
           isTranscoding,
+          retry: undefined,
         });
       },
     );

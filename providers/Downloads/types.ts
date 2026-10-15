@@ -138,6 +138,13 @@ export type JobStatus = {
   startTime?: Date;
   /** Whether the download is being transcoded (optional) */
   isTranscoding?: boolean;
+  /** Set while native waits to retry after a transient failure; cleared once progress resumes. */
+  retry?: {
+    attempt: number;
+    maxAttempts: number;
+    /** When the next attempt starts, in ms since the epoch. */
+    retryAt: number;
+  };
   /** Pre-downloaded trickplay data (optional) - downloaded before video starts */
   trickPlayData?: TrickPlayData;
   /** Pre-downloaded intro segments (optional) - downloaded before video starts */

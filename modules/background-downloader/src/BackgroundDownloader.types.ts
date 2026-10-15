@@ -31,6 +31,27 @@ export interface DownloadStartedEvent {
   itemId?: string;
 }
 
+/**
+ * A transfer failed transiently (network drop, VPN gateway answering 403, server 5xx) and native
+ * replaced it with a new attempt that starts at `retryAt`. iOS only. The download keeps its item;
+ * only the task id changes, and any later cancel must use the new one.
+ */
+export interface DownloadRetryingEvent {
+  /** Task id of the new attempt. */
+  taskId: number;
+  previousTaskId: number;
+  /** 1-based number of this attempt within the current failure streak. */
+  attempt: number;
+  maxAttempts: number;
+  /** When the attempt starts, in ms since the epoch. */
+  retryAt: number;
+  /** Whether it continues from where the transfer stopped rather than from the start. */
+  resumed: boolean;
+  error: string;
+  /** Jellyfin item id, echoed from the metadata passed at enqueue time (absent without metadata). */
+  itemId?: string;
+}
+
 export interface ActiveDownload {
   /** Native task id; `-1` for queued entries, which have no task yet. */
   taskId: number;
