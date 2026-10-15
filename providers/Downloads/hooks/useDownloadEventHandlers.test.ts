@@ -1,6 +1,10 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { renderHook } from "@testing-library/react-native";
-import type { DownloadCompleteEvent, DownloadStartedEvent } from "@/modules";
+import type {
+  DownloadCompleteEvent,
+  DownloadRetryingEvent,
+  DownloadStartedEvent,
+} from "@/modules";
 import { DOCUMENTS, fakeFiles } from "@/test-utils/fileSystem";
 import { clearMmkv } from "@/test-utils/mmkv";
 
@@ -17,6 +21,7 @@ jest.mock(
 const mockListeners: {
   started?: (event: DownloadStartedEvent) => void;
   complete?: (event: DownloadCompleteEvent) => Promise<void>;
+  retrying?: (event: DownloadRetryingEvent) => void;
 } = {};
 const mockCancelDownload = jest.fn();
 jest.mock("@/modules", () => ({
@@ -24,6 +29,10 @@ jest.mock("@/modules", () => ({
     cancelDownload: (taskId: number) => mockCancelDownload(taskId),
     addStartedListener: (listener: typeof mockListeners.started) => {
       mockListeners.started = listener;
+      return { remove: () => {} };
+    },
+    addRetryingListener: (listener: typeof mockListeners.retrying) => {
+      mockListeners.retrying = listener;
       return { remove: () => {} };
     },
     addProgressListener: () => ({ remove: () => {} }),
@@ -95,11 +104,14 @@ const started: DownloadStartedEvent = {
  * Mounts the hook and hands back the listener it registered. A hook that registers none fails
  * the test: every "nothing was deleted" assertion below would otherwise pass on its own.
  */
-const listenerFor = async <K extends keyof typeof mockListeners>(name: K) => {
+const listenerFor = async <K extends keyof typeof mockListeners>(
+  name: K,
+  updateProcess = jest.fn(),
+) => {
   await renderHook(() =>
     useDownloadEventHandlers({
       processes: [],
-      updateProcess: jest.fn(),
+      updateProcess,
       removeProcess: jest.fn(),
     }),
   );
@@ -117,6 +129,7 @@ const start = async (event: DownloadStartedEvent) =>
 beforeEach(() => {
   mockListeners.started = undefined;
   mockListeners.complete = undefined;
+  mockListeners.retrying = undefined;
   mockCancelDownload.mockClear();
   clearMmkv();
   // The database caches what it parsed, so emptying the store alone would not reset it.
@@ -221,6 +234,66 @@ describe("a download that starts", () => {
   // Music downloads go through the same native module without an item id.
   it("is left alone when it is not a video download", async () => {
     await start({ ...started, itemId: undefined });
+
+    expect(mockCancelDownload).not.toHaveBeenCalled();
+  });
+});
+
+describe("a download that retries", () => {
+  // iOS replaces a transfer that failed on a network drop with a new task that starts after a
+  // backoff. The record has to follow the new task id, or a cancel would go to the dead task.
+  const retrying: DownloadRetryingEvent = {
+    taskId: 8,
+    previousTaskId: 7,
+    attempt: 2,
+    maxAttempts: 12,
+    retryAt: 1_000,
+    resumed: false,
+    error: "The network connection was lost.",
+    itemId: "item-1",
+  };
+
+  it("moves its record to the new task and shows the retry", async () => {
+    savePendingDownload(record);
+    const updateProcess = jest.fn();
+
+    (await listenerFor("retrying", updateProcess))(retrying);
+
+    expect(getPendingDownload("item-1")).toMatchObject({
+      status: "downloading",
+      taskId: 8,
+    });
+    expect(updateProcess).toHaveBeenCalledWith("item-1", {
+      status: "downloading",
+      speed: undefined,
+      // Without resume data the transfer starts from the beginning.
+      progress: 0,
+      bytesDownloaded: 0,
+      retry: { attempt: 2, maxAttempts: 12, retryAt: 1_000 },
+    });
+    expect(mockCancelDownload).not.toHaveBeenCalled();
+  });
+
+  it("keeps its progress when the transfer resumes where it stopped", async () => {
+    savePendingDownload(record);
+    const updateProcess = jest.fn();
+
+    (await listenerFor("retrying", updateProcess))({
+      ...retrying,
+      resumed: true,
+    });
+
+    expect(updateProcess.mock.calls[0][1]).not.toHaveProperty("progress");
+  });
+
+  it("is cancelled when its record is already gone", async () => {
+    (await listenerFor("retrying"))(retrying);
+
+    expect(mockCancelDownload).toHaveBeenCalledWith(8);
+  });
+
+  it("is left alone when it is not a video download", async () => {
+    (await listenerFor("retrying"))({ ...retrying, itemId: undefined });
 
     expect(mockCancelDownload).not.toHaveBeenCalled();
   });

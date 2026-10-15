@@ -4,6 +4,7 @@ export type {
   DownloadCompleteEvent,
   DownloadErrorEvent,
   DownloadProgressEvent,
+  DownloadRetryingEvent,
   DownloadStartedEvent,
 } from "./background-downloader";
 export { default as BackgroundDownloader } from "./background-downloader";

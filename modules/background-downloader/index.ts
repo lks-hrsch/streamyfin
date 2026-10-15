@@ -6,6 +6,7 @@ import type {
   DownloadCompleteEvent,
   DownloadErrorEvent,
   DownloadProgressEvent,
+  DownloadRetryingEvent,
   DownloadStartedEvent,
 } from "./src/BackgroundDownloader.types";
 import BackgroundDownloaderModule from "./src/BackgroundDownloaderModule";
@@ -57,6 +58,11 @@ export interface BackgroundDownloader {
 
   addStartedListener(
     listener: (event: DownloadStartedEvent) => void,
+  ): EventSubscription;
+
+  /** iOS only; Android never emits it. */
+  addRetryingListener(
+    listener: (event: DownloadRetryingEvent) => void,
   ): EventSubscription;
 }
 
@@ -147,6 +153,15 @@ const BackgroundDownloader: BackgroundDownloader = {
       listener,
     );
   },
+
+  addRetryingListener(
+    listener: (event: DownloadRetryingEvent) => void,
+  ): EventSubscription {
+    return BackgroundDownloaderModule.addListener(
+      "onDownloadRetrying",
+      listener,
+    );
+  },
 };
 
 export default BackgroundDownloader;
@@ -157,5 +172,6 @@ export type {
   DownloadCompleteEvent,
   DownloadErrorEvent,
   DownloadProgressEvent,
+  DownloadRetryingEvent,
   DownloadStartedEvent,
 };

@@ -50,6 +50,8 @@ export interface PendingDownload {
   subtitleStreamIndex?: number;
   /** Metadata originally handed to native; reused when re-enqueueing after a relaunch. */
   activityMetadata?: DownloadActivityMetadata;
+  /** How often a relaunch found native had lost this download and re-enqueued it. */
+  lostReenqueues?: number;
 }
 
 const PENDING_DOWNLOADS_KEY = "downloads.pending.v1.json";

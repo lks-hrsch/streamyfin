@@ -16,6 +16,11 @@ struct DownloadTaskInfo: Codable {
   let destinationPath: String?
   var metadata: DownloadActivityMetadata?
   var createdAt: Date = Date()
+  /// Consecutive failed attempts behind this task (see `DownloadRetryPolicy`); nil before the
+  /// first failure. Persisted so the budget survives the process dying mid-backoff. Optional
+  /// rather than defaulted because synthesized decoding ignores defaults, and entries written
+  /// before this field existed must still load.
+  var retryAttempt: Int?
   /// Custom proxy auth headers. Deliberately left out of `CodingKeys`: these are
   /// credentials, and this store is an unencrypted App Group container. A
   /// background transfer already carries them in its own request, so nothing is
@@ -23,7 +28,7 @@ struct DownloadTaskInfo: Codable {
   var headers: [String: String]?
 
   private enum CodingKeys: String, CodingKey {
-    case url, destinationPath, metadata, createdAt
+    case url, destinationPath, metadata, createdAt, retryAttempt
   }
 }
 
