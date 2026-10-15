@@ -19,6 +19,7 @@ const mockDownloader = {
   enqueueDownload: jest.fn(),
   cancelDownload: jest.fn(),
   cancelQueuedDownload: jest.fn(),
+  resumeDownload: jest.fn(),
 };
 jest.mock("@/modules", () => ({
   get BackgroundDownloader() {
@@ -159,6 +160,25 @@ describe("cancelDownload", () => {
     await act(() => operations.cancelDownload("item-1"));
 
     expect(fakeFiles.deleted()).toEqual([]);
+  });
+
+  // A paused download holds the head of the native queue under its task id. Cancelled by URL, as
+  // a queued one is, it stayed there and the queue behind it never moved again.
+  it("cancels a paused download by its task", async () => {
+    const { operations } = await renderOperations();
+    await act(() =>
+      operations.startBackgroundDownload(url, item, mediaSource, maxBitrate),
+    );
+    savePendingDownload({
+      ...getPendingDownload("item-1")!,
+      status: "paused",
+      taskId: 7,
+    });
+
+    await act(() => operations.cancelDownload("item-1"));
+
+    expect(mockDownloader.cancelDownload).toHaveBeenCalledWith(7);
+    expect(mockDownloader.cancelQueuedDownload).not.toHaveBeenCalled();
   });
 
   // The card, and its cancel button, is on screen before the pending record is saved: staging
@@ -442,5 +462,34 @@ describe("startBackgroundDownload", () => {
 
     expect(mockDownloadAdditionalAssets).not.toHaveBeenCalled();
     expect(fakeFiles.deleted()).toEqual([]);
+  });
+});
+
+describe("resumeDownload", () => {
+  it("asks native to go on with a paused download", async () => {
+    const { operations } = await renderOperations();
+    await act(() =>
+      operations.startBackgroundDownload(url, item, mediaSource, maxBitrate),
+    );
+    savePendingDownload({
+      ...getPendingDownload("item-1")!,
+      status: "paused",
+      taskId: 7,
+    });
+
+    operations.resumeDownload("item-1");
+
+    expect(mockDownloader.resumeDownload).toHaveBeenCalledWith(7);
+  });
+
+  it("leaves a download that is not paused alone", async () => {
+    const { operations } = await renderOperations();
+    await act(() =>
+      operations.startBackgroundDownload(url, item, mediaSource, maxBitrate),
+    );
+
+    operations.resumeDownload("item-1");
+
+    expect(mockDownloader.resumeDownload).not.toHaveBeenCalled();
   });
 });

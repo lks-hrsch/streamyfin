@@ -1,10 +1,8 @@
-import { MAX_LOST_DOWNLOAD_REENQUEUES } from "@/constants/Downloads";
 import type { ActiveDownload } from "@/modules/background-downloader/src/BackgroundDownloader.types";
-import type { PendingDownload } from "./pendingDownloads";
 
 export type ReconcileAction =
   | { kind: "restore"; status: "queued" }
-  | { kind: "restore"; status: "downloading"; taskId: number }
+  | { kind: "restore"; status: "downloading" | "paused"; taskId: number }
   | { kind: "rearm-with-headers" }
   | { kind: "finalize" }
   | { kind: "re-enqueue" }
@@ -16,13 +14,11 @@ export type ReconcileAction =
  * `useDownloadReconciliation` for how each action is carried out.
  */
 export function decideReconcileAction({
-  record,
   nativeTask,
   hasCompletedFile,
   hasPlainFileName,
   needsHeaders,
 }: {
-  record: Pick<PendingDownload, "status" | "lostReenqueues">;
   nativeTask?: Pick<ActiveDownload, "state" | "taskId">;
   hasCompletedFile: boolean;
   /** False for a stored file name carrying a path, which is never written to again. */
@@ -38,10 +34,11 @@ export function decideReconcileAction({
   }
 
   if (nativeTask) {
-    // Native may have replaced the task on a retry, so the id it reports now is the one to keep.
+    // Native replaces the task when a paused download goes on, so the id it reports now is the
+    // one to keep.
     return {
       kind: "restore",
-      status: "downloading",
+      status: nativeTask.state === "paused" ? "paused" : "downloading",
       taskId: nativeTask.taskId,
     };
   }
@@ -51,14 +48,7 @@ export function decideReconcileAction({
   }
 
   // Native lost it: an Android process death, or a failure reported while no JS was listening.
-  // Dropping it here used to make the download vanish without a word, so it gets restarted, up to
-  // a cap so one that fails every time does not return on every launch.
-  if (
-    hasPlainFileName &&
-    (record.lostReenqueues ?? 0) < MAX_LOST_DOWNLOAD_REENQUEUES
-  ) {
-    return { kind: "re-enqueue" };
-  }
-
-  return { kind: "drop" };
+  // Dropping it here made the download vanish without a word, so it starts again; on iOS an
+  // outage pauses it rather than failing it.
+  return hasPlainFileName ? { kind: "re-enqueue" } : { kind: "drop" };
 }

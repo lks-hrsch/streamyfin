@@ -4,8 +4,9 @@ import { useTranslation } from "react-i18next";
 import type {
   DownloadCompleteEvent,
   DownloadErrorEvent,
+  DownloadPausedEvent,
   DownloadProgressEvent,
-  DownloadRetryingEvent,
+  DownloadResumedEvent,
   DownloadStartedEvent,
 } from "@/modules";
 import { BackgroundDownloader } from "@/modules";
@@ -88,25 +89,45 @@ export function useDownloadEventHandlers({
     return () => startedSub.remove();
   }, [updateProcess]);
 
-  // Handle retries after transient failures (iOS). The download goes on natively under a new task
-  // id, which the pending record must follow or a later cancel would target a dead task.
+  // Interrupted downloads (iOS) pause instead of failing, keeping their place at the head of the
+  // native queue, and go on when the network changes, the app comes back, or the user resumes them.
   useEffect(() => {
-    const retryingSub = BackgroundDownloader.addRetryingListener(
-      (event: DownloadRetryingEvent) => {
+    const pausedSub = BackgroundDownloader.addPausedListener(
+      (event: DownloadPausedEvent) => {
         const itemId = event.itemId;
         if (!itemId) return;
 
         if (!getPendingDownload(itemId)) {
-          // Cancelled while native was scheduling the attempt, like a start without a record.
+          // Cancelled while it was being interrupted: the paused entry would hold the queue.
           BackgroundDownloader.cancelDownload(event.taskId);
           return;
         }
 
-        writeToLog("WARN", "Download interrupted, retrying", {
-          attempt: event.attempt,
-          resumed: event.resumed,
+        writeToLog("WARN", "Download interrupted, paused", {
+          resumable: event.resumable,
           error: event.error,
         });
+
+        updatePendingDownload(itemId, {
+          status: "paused",
+          taskId: event.taskId,
+        });
+        clearSpeedData(itemId);
+        updateProcess(itemId, { status: "paused", speed: undefined });
+      },
+    );
+
+    // The download goes on natively under a new task id, which the pending record must follow
+    // or a later cancel would target a dead task.
+    const resumedSub = BackgroundDownloader.addResumedListener(
+      (event: DownloadResumedEvent) => {
+        const itemId = event.itemId;
+        if (!itemId) return;
+
+        if (!getPendingDownload(itemId)) {
+          BackgroundDownloader.cancelDownload(event.taskId);
+          return;
+        }
 
         updatePendingDownload(itemId, {
           status: "downloading",
@@ -119,16 +140,14 @@ export function useDownloadEventHandlers({
           speed: undefined,
           // Without resume data the transfer starts over.
           ...(event.resumed ? {} : { progress: 0, bytesDownloaded: 0 }),
-          retry: {
-            attempt: event.attempt,
-            maxAttempts: event.maxAttempts,
-            retryAt: event.retryAt,
-          },
         });
       },
     );
 
-    return () => retryingSub.remove();
+    return () => {
+      pausedSub.remove();
+      resumedSub.remove();
+    };
   }, [updateProcess]);
 
   // Track last logged progress per process to avoid spam
@@ -229,7 +248,6 @@ export function useDownloadEventHandlers({
           speed,
           estimatedTotalSizeBytes: estimatedTotalBytes,
           isTranscoding,
-          retry: undefined,
         });
       },
     );

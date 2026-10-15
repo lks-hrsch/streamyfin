@@ -32,22 +32,26 @@ export interface DownloadStartedEvent {
 }
 
 /**
- * A transfer failed transiently (network drop, VPN gateway answering 403, server 5xx) and native
- * replaced it with a new attempt that starts at `retryAt`. iOS only. The download keeps its item;
- * only the task id changes, and any later cancel must use the new one.
+ * A transfer was interrupted (network drop, VPN gateway answering 403, server 5xx) and is paused.
+ * iOS only. It keeps its place at the head of the queue, under the same task id, and goes on when
+ * the network changes, the app returns to the foreground, or `resumeDownload` is called.
  */
-export interface DownloadRetryingEvent {
-  /** Task id of the new attempt. */
+export interface DownloadPausedEvent {
+  taskId: number;
+  error: string;
+  /** Whether it can go on where it stopped rather than start over. */
+  resumable: boolean;
+  /** Jellyfin item id, echoed from the metadata passed at enqueue time (absent without metadata). */
+  itemId?: string;
+}
+
+/** A paused download started again, under a new task id. iOS only. */
+export interface DownloadResumedEvent {
+  /** Task id of the new transfer; any later cancel must use it. */
   taskId: number;
   previousTaskId: number;
-  /** 1-based number of this attempt within the current failure streak. */
-  attempt: number;
-  maxAttempts: number;
-  /** When the attempt starts, in ms since the epoch. */
-  retryAt: number;
-  /** Whether it continues from where the transfer stopped rather than from the start. */
+  /** Whether it goes on where it stopped rather than from the start. */
   resumed: boolean;
-  error: string;
   /** Jellyfin item id, echoed from the metadata passed at enqueue time (absent without metadata). */
   itemId?: string;
 }
@@ -59,8 +63,11 @@ export interface ActiveDownload {
   /** Jellyfin item id, echoed from the metadata passed at enqueue time (absent without metadata). */
   itemId?: string;
   destinationPath?: string;
-  /** `running` for the transfer in flight, `queued` for entries waiting behind it. */
-  state?: "running" | "queued";
+  /**
+   * `running` for the transfer in flight, `paused` for one interrupted and waiting to go on
+   * (iOS), `queued` for entries waiting behind it.
+   */
+  state?: "running" | "paused" | "queued";
 }
 
 /**
@@ -101,6 +108,8 @@ export interface BackgroundDownloaderModuleType {
   cancelQueuedDownload(url: string): void;
   cancelAllDownloads(): void;
   getActiveDownloads(): Promise<ActiveDownload[]>;
+  /** iOS only — absent from the Android module. */
+  resumeDownload?(taskId: number): void;
   /** iOS only — absent from the Android module. */
   setLiveActivityEnabled?(enabled: boolean): void;
   /** iOS only — absent from the Android module. */
