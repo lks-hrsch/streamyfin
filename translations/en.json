@@ -1039,6 +1039,8 @@
     "advanced": "Advanced",
     "request_as": "Request as",
     "tags": "Tags",
+    "destination_server": "Destination server",
+    "server_default": "{{server}} (default)",
     "quality_profile": "Quality profile",
     "root_folder": "Root folder",
     "season_all": "Season (All)",
