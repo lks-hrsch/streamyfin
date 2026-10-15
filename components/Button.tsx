@@ -11,9 +11,9 @@ import {
   Platform,
   Pressable,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
+import { Pressable as GesturePressable } from "react-native-gesture-handler";
 import { useHaptic } from "@/hooks/useHaptic";
 import { scaleSize } from "@/utils/scaleSize";
 import { Loader } from "./Loader";
@@ -71,7 +71,7 @@ const getColorClasses = (
 };
 
 export interface ButtonProps
-  extends React.ComponentProps<typeof TouchableOpacity> {
+  extends React.ComponentProps<typeof GesturePressable> {
   onPress?: () => void;
   className?: string;
   textClassName?: string;
@@ -162,7 +162,14 @@ export const Button: React.FC<PropsWithChildren<ButtonProps>> = ({
       </Animated.View>
     </Pressable>
   ) : (
-    <TouchableOpacity
+    // React Native's own TouchableOpacity never receives press events when the
+    // iOS build runs on macOS ("Designed for iPad" / Catalyst), so every button
+    // built on it is dead there. Same defect this repo already fixed for header
+    // buttons; see .claude/learned-facts/macos-header-buttons-fix.md. Gesture
+    // Handler's Pressable does get them, and GestureHandlerRootView already
+    // wraps the app (app/_layout.tsx). className survives the swap because
+    // NativeWind v2 rewrites it to style in Babel, independent of the component.
+    <GesturePressable
       className={`
         p-3 rounded-xl items-center justify-center
         ${(loading || disabled) && "opacity-50"}
@@ -210,6 +217,6 @@ export const Button: React.FC<PropsWithChildren<ButtonProps>> = ({
           {iconRight ?? (justify === "between" && <View className='w-4' />)}
         </View>
       )}
-    </TouchableOpacity>
+    </GesturePressable>
   );
 };
