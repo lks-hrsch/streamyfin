@@ -3,17 +3,17 @@ import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert } from "react-native";
+import {
+  RECEIVER_LOAD_TIMEOUT_MS,
+  RECEIVER_MAX_QUEUE_ITEMS,
+} from "@/constants/Cast";
 import CastContext, {
   CastState,
   PlayServicesState,
   useCastDevice,
   useCastState,
   useRemoteMediaClient,
-} from "react-native-google-cast";
-import {
-  RECEIVER_LOAD_TIMEOUT_MS,
-  RECEIVER_MAX_QUEUE_ITEMS,
-} from "@/constants/Cast";
+} from "@/packages/react-native-google-cast";
 import {
   castToJellyfinReceiver,
   currentReceiverName,

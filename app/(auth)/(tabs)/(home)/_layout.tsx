@@ -13,8 +13,9 @@ import {
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
 import { Colors } from "@/constants/Colors";
 import useRouter from "@/hooks/useAppRouter";
+import { isCastAvailable } from "@/packages/react-native-google-cast";
 
-const Chromecast = Platform.isTV ? null : require("@/components/Chromecast");
+const Chromecast = isCastAvailable ? require("@/components/Chromecast") : null;
 
 import { useAtom } from "jotai";
 import { useSessions, type useSessionsProps } from "@/hooks/useSessions";
@@ -61,7 +62,7 @@ export default function IndexLayout() {
           headerRight: () =>
             Platform.isTV ? null : (
               <HeaderButtonGroup>
-                <Chromecast.Chromecast />
+                {Chromecast && <Chromecast.Chromecast />}
                 <SyncPlayButton />
                 {user?.Policy?.IsAdministrator && <SessionsButton />}
                 <SettingsButton />
