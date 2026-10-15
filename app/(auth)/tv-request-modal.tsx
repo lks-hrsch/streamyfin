@@ -22,6 +22,11 @@ import useRouter from "@/hooks/useAppRouter";
 import { useSeerr } from "@/hooks/useSeerr";
 import { tvRequestModalAtom } from "@/utils/atoms/tvRequestModal";
 import { canRequestForOthers } from "@/utils/seerr/requests";
+import {
+  defaultRequestServer,
+  requestServers,
+  selectRequestServer,
+} from "@/utils/seerr/servers";
 import type {
   MediaRequestBody,
   QualityProfile,
@@ -49,8 +54,10 @@ export default function TVRequestModalPage() {
   const forOthers = canRequestForOthers(seerrUser?.permissions ?? 0);
 
   const [activeSelector, setActiveSelector] = useState<
-    "profile" | "folder" | "user" | null
+    "server" | "profile" | "folder" | "user" | null
   >(null);
+  // Unset follows Seerr's default server.
+  const [pickedServerId, setPickedServerId] = useState<number>();
 
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(200)).current;
@@ -100,9 +107,17 @@ export default function TVRequestModalPage() {
     enabled: forOthers && !!seerrApi && !!seerrUser && !!modalState,
   });
 
-  const defaultService = useMemo(
-    () => serviceSettings?.find?.((v) => v.isDefault),
-    [serviceSettings],
+  const servers = useMemo(
+    () => requestServers(serviceSettings, !!modalState?.requestBody?.is4k),
+    [serviceSettings, modalState?.requestBody?.is4k],
+  );
+
+  // The server the request goes to: the one picked, else Seerr's default.
+  const selectedService = useMemo(
+    () =>
+      servers.find((server) => server.id === pickedServerId) ??
+      defaultRequestServer(servers),
+    [servers, pickedServerId],
   );
 
   const { data: defaultServiceDetails } = useQuery({
@@ -112,19 +127,19 @@ export default function TVRequestModalPage() {
       modalState?.mediaType,
       "service",
       "details",
-      defaultService?.id,
+      selectedService?.id,
     ],
     queryFn: async () => {
       setRequestOverrides((prev) => ({
         ...prev,
-        serverId: defaultService?.id,
+        serverId: selectedService?.id,
       }));
       return seerrApi?.serviceDetails(
         modalState?.mediaType === "movie" ? "radarr" : "sonarr",
-        defaultService!.id,
+        selectedService!.id,
       );
     },
-    enabled: !!seerrApi && !!seerrUser && !!defaultService && !!modalState,
+    enabled: !!seerrApi && !!seerrUser && !!selectedService && !!modalState,
   });
 
   const defaultProfile: QualityProfile | undefined = useMemo(
@@ -154,7 +169,25 @@ export default function TVRequestModalPage() {
   const pathTitleExtractor = (item: RootFolder) =>
     `${item.path} (${item.freeSpace.bytesToReadable()})`;
 
+  const serverLabel = useCallback(
+    (server: { name: string; isDefault: boolean }) =>
+      server.isDefault
+        ? t("seerr.server_default", { server: server.name })
+        : server.name,
+    [t],
+  );
+
   // Option builders
+  const serverOptions: TVOptionItem<number>[] = useMemo(
+    () =>
+      servers.map((server) => ({
+        label: serverLabel(server),
+        value: server.id,
+        selected: selectedService?.id === server.id,
+      })),
+    [servers, selectedService, serverLabel],
+  );
+
   const qualityProfileOptions: TVOptionItem<number>[] = useMemo(
     () =>
       defaultServiceDetails?.profiles.map((profile) => ({
@@ -244,6 +277,12 @@ export default function TVRequestModalPage() {
   }, [users, requestOverrides.userId, seerrUser, t]);
 
   // Handlers
+  const handleServerChange = useCallback((serverId: number) => {
+    setPickedServerId(serverId);
+    setRequestOverrides((prev) => selectRequestServer(prev, serverId));
+    setActiveSelector(null);
+  }, []);
+
   const handleProfileChange = useCallback((profileId: number) => {
     setRequestOverrides((prev) => ({ ...prev, profileId }));
     setActiveSelector(null);
@@ -280,7 +319,7 @@ export default function TVRequestModalPage() {
     if (!modalState) return;
 
     const body = {
-      is4k: defaultService?.is4k || defaultServiceDetails?.server.is4k,
+      is4k: selectedService?.is4k || defaultServiceDetails?.server.is4k,
       profileId: defaultProfile?.id,
       rootFolder: defaultFolder?.path,
       tags: defaultTags.map((t) => t.id),
@@ -316,7 +355,7 @@ export default function TVRequestModalPage() {
     defaultProfile,
     defaultFolder,
     defaultTags,
-    defaultService,
+    selectedService,
     defaultServiceDetails,
     requestMedia,
     router,
@@ -328,7 +367,7 @@ export default function TVRequestModalPage() {
   }
 
   const isDataLoaded =
-    defaultService && defaultServiceDetails && (!forOthers || users);
+    selectedService && defaultServiceDetails && (!forOthers || users);
 
   return (
     <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
@@ -360,11 +399,19 @@ export default function TVRequestModalPage() {
                 showsVerticalScrollIndicator={false}
               >
                 <View style={styles.optionsContainer}>
+                  {servers.length > 1 && selectedService && (
+                    <TVRequestOptionRow
+                      label={t("seerr.destination_server")}
+                      value={serverLabel(selectedService)}
+                      onPress={() => setActiveSelector("server")}
+                      hasTVPreferredFocus
+                    />
+                  )}
                   <TVRequestOptionRow
                     label={t("seerr.quality_profile")}
                     value={selectedProfileName}
                     onPress={() => setActiveSelector("profile")}
-                    hasTVPreferredFocus
+                    hasTVPreferredFocus={servers.length <= 1}
                   />
                   <TVRequestOptionRow
                     label={t("seerr.root_folder")}
@@ -423,6 +470,14 @@ export default function TVRequestModalPage() {
       </Animated.View>
 
       {/* Sub-selectors */}
+      <TVOptionSelector
+        visible={activeSelector === "server"}
+        title={t("seerr.destination_server")}
+        options={serverOptions}
+        onSelect={handleServerChange}
+        onClose={() => setActiveSelector(null)}
+        cancelLabel={t("seerr.cancel")}
+      />
       <TVOptionSelector
         visible={activeSelector === "profile"}
         title={t("seerr.quality_profile")}

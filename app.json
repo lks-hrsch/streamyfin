@@ -33,9 +33,9 @@
       "entitlements": {
         "com.apple.developer.networking.wifi-info": true
       },
-      "bundleIdentifier": "com.fredrikburmester.streamyfin",
+      "bundleIdentifier": "de.lkshrsch.streamyfin",
       "icon": "./assets/images/icon-ios-liquid-glass.icon",
-      "appleTeamId": "MWD5K362T8"
+      "appleTeamId": "BWMWYHN53X"
     },
     "android": {
       "adaptiveIcon": {
@@ -43,7 +43,7 @@
         "monochromeImage": "./assets/images/icon-android-themed.png",
         "backgroundColor": "#2E2E2E"
       },
-      "package": "com.fredrikburmester.streamyfin",
+      "package": "de.lkshrsch.streamyfin",
       "permissions": [
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
@@ -194,15 +194,12 @@
         "origin": false
       },
       "eas": {
-        "projectId": "e79219d1-797f-4fbe-9fa1-cfd360690a68"
+        "projectId": "b78a645d-e215-4e46-b03b-222e9bbb2142"
       }
     },
-    "owner": "streamyfin",
+    "owner": "lkshrsch",
     "runtimeVersion": {
       "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/e79219d1-797f-4fbe-9fa1-cfd360690a68"
     }
   }
 }

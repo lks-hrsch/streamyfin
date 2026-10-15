@@ -13,6 +13,7 @@ import {
 } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import * as BackgroundTask from "expo-background-task";
+import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { Image } from "expo-image";
 import { DarkTheme, ThemeProvider } from "expo-router/react-navigation";
@@ -425,7 +426,7 @@ function Layout() {
     // only create push token for real devices (pointless for emulators)
     if (Device.isDevice) {
       Notifications?.getExpoPushTokenAsync({
-        projectId: "e79219d1-797f-4fbe-9fa1-cfd360690a68",
+        projectId: Constants.expoConfig?.extra?.eas?.projectId,
       })
         .then((token: ExpoPushToken) => {
           if (token) {
