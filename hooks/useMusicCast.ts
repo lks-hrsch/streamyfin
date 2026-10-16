@@ -7,7 +7,7 @@ import CastContext, {
   PlayServicesState,
   useCastState,
   useRemoteMediaClient,
-} from "react-native-google-cast";
+} from "@/packages/react-native-google-cast";
 import { getAudioContentType } from "@/utils/jellyfin/audio/getAudioContentType";
 import { getAudioStreamUrl } from "@/utils/jellyfin/audio/getAudioStreamUrl";
 import { logAndCaptureError } from "@/utils/log";

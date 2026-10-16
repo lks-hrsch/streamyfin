@@ -28,6 +28,9 @@ public enum DownloadActivityState: String, Codable, Hashable {
   /// queued downloads start from background wake-ups. The one activity is therefore created for the
   /// first download and *rebound* to each subsequent one via `activity.update`, which has no
   /// foreground restriction — possible only if everything episode-specific is mutable.
+  // ActivityAttributes is unavailable on Mac Catalyst, which has no Live Activities; the shared
+  // container below stays, the download store reads it there too.
+  #if !targetEnvironment(macCatalyst)
   @available(iOS 16.1, *)
   public struct DownloadActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
@@ -100,6 +103,8 @@ public enum DownloadActivityState: String, Codable, Hashable {
       labels[state.rawValue] ?? ""
     }
   }
+
+  #endif
 
   /// Resolves the App Group container both targets share. The identifier is written into each
   /// target's Info.plist by `plugins/withDownloadLiveActivity.ts`, mirroring how
