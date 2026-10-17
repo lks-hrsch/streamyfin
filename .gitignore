@@ -85,6 +85,7 @@ coverage/
 !.claude/learned-facts.md
 .agents/skills/**
 skills-lock.json
+graphify-out/
 
 # CI-injected Google Play service account key (written at build time)
 google-service-account.json
