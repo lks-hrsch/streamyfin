@@ -584,6 +584,8 @@
     "downloads": {
       "downloads_title": "Downloads",
       "transcoding": "Transcoding",
+      "paused_waiting_for_connection": "Paused, waiting for the connection",
+      "resume_download": "Resume download",
       "series": "Series",
       "movies": "Movies",
       "other_media": "Other media",
