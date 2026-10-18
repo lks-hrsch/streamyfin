@@ -118,6 +118,7 @@ export type JobStatus = {
     | "error" // The job encountered an error
     | "pending" // The job is waiting to start
     | "completed" // The job has finished downloading
+    | "paused" // Interrupted, waits for the connection or the user to go on (iOS)
     | "queued"; // The job is queued to start
   /** Timestamp of when the job was created or last updated */
   timestamp: Date;
