@@ -1,4 +1,5 @@
 import {
+  type CollectionDetails,
   type CombinedCredit,
   DiscoverSliderType,
   type GenreSliderItem,
@@ -83,6 +84,30 @@ describe("the types derived from the spec", () => {
 
     expect(credits.id).toBe(1);
     expect(genre.name).toBe("Drama");
+  });
+  // A part is a film as Discover's are, the library's whole view of it
+  // included, which the spec's own MediaInfo would not let it carry.
+  test("describe a collection and its films", () => {
+    const collection: CollectionDetails = {
+      id: 10,
+      name: "Star Wars Collection",
+      parts: [
+        {
+          id: 11,
+          mediaType: MediaType.MOVIE,
+          title: "Star Wars",
+          mediaInfo: {
+            id: 1,
+            tmdbId: 11,
+            status: MediaStatus.AVAILABLE,
+            mediaType: MediaType.MOVIE,
+            jellyfinMediaId: "abc",
+          },
+        },
+      ],
+    };
+
+    expect(collection.parts?.[0].mediaInfo?.status).toBe(MediaStatus.AVAILABLE);
   });
 });
 

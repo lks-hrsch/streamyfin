@@ -26,6 +26,10 @@ import { Image, prefetchServerImage } from "@/components/common/ServerImage";
 import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
 import { Loader } from "@/components/Loader";
+import {
+  TVMoreOnSeerr,
+  TVMoreOnSeerrArea,
+} from "@/components/persons/TVMoreOnSeerr";
 import { TVPosterCard } from "@/components/tv/TVPosterCard";
 import { useScaledTVPosterSizes } from "@/constants/TVPosterSizes";
 import { useScaledTVSizes } from "@/constants/TVSizes";
@@ -367,7 +371,8 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
         }}
       >
         {/* Top section - Actor image + Info */}
-        <View
+        <TVMoreOnSeerrArea
+          person={item}
           style={{
             flexDirection: "row",
             marginBottom: 48,
@@ -451,8 +456,10 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
                 {item.Overview}
               </Text>
             )}
+
+            <TVMoreOnSeerr person={item} />
           </View>
-        </View>
+        </TVMoreOnSeerrArea>
 
         {/* Filmography sections */}
         <View style={{ flex: 1, overflow: "visible" }}>

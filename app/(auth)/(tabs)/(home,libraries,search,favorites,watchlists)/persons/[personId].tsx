@@ -15,6 +15,7 @@ import {
   PARALLAX_HEADER_HEIGHT,
   ParallaxScrollView,
 } from "@/components/ParallaxPage";
+import { MoreOnSeerr } from "@/components/persons/MoreOnSeerr";
 import { TVActorPage } from "@/components/persons/TVActorPage";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import { getBackdropUrl } from "@/utils/jellyfin/image/getBackdropUrl";
@@ -121,6 +122,7 @@ const MobileActorPage: React.FC<{ personId: string }> = ({ personId }) => {
         <View className='px-4 mb-4'>
           <MoviesTitleHeader item={item} className='mb-4' />
           <OverviewText text={item.Overview} />
+          <MoreOnSeerr person={item} className='mt-4' />
         </View>
 
         <InfiniteScrollingCollectionList
