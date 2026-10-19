@@ -20,6 +20,11 @@ import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
 import { seasonIndexAtom } from "@/components/series/SeasonPicker";
 import { TVEpisodeList } from "@/components/series/TVEpisodeList";
+import {
+  TVSeerrMissingSeasons,
+  TVSeerrRequestSeasonsButton,
+  useTVSeerrMissingSeasons,
+} from "@/components/series/TVSeerrMissingSeasons";
 import { TVSeriesHeader } from "@/components/series/TVSeriesHeader";
 import { TVSimilarItems } from "@/components/TVSimilarItems";
 import { TVButton } from "@/components/tv/TVButton";
@@ -51,6 +56,7 @@ const HORIZONTAL_PADDING = scaleSize(80);
 const TOP_PADDING = scaleSize(140);
 const POSTER_WIDTH_PERCENT = 0.22;
 const SCALE_PADDING = scaleSize(20);
+const NO_EPISODES: BaseItemDto[] = [];
 
 interface TVSeriesPageProps {
   item: BaseItemDto;
@@ -62,10 +68,13 @@ interface TVSeriesPageProps {
 
 export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   item,
-  allEpisodes = [],
+  allEpisodes: knownEpisodes,
   isLoading: _isLoading,
   initialSeasonIndex,
 }) => {
+  // Undefined while the episodes load, or when they could not: Seerr's list
+  // waits for them rather than taking none for an empty library.
+  const allEpisodes = knownEpisodes ?? NO_EPISODES;
   const typography = useScaledTVTypography();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -92,6 +101,14 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   // Focus guide refs (using useState to trigger re-renders when refs are set)
   const [playButtonRef, setPlayButtonRef] = useState<View | null>(null);
   const [firstEpisodeRef, setFirstEpisodeRef] = useState<View | null>(null);
+
+  // Nothing to ask Seerr offline. Play takes the focus back from the request
+  // sheet when the request left nothing to ask for, and its button with it.
+  const seerr = useTVSeerrMissingSeasons(
+    isOffline ? undefined : item,
+    knownEpisodes,
+    playButtonRef,
+  );
 
   // ScrollView ref for page scrolling
   const mainScrollRef = useRef<ScrollView>(null);
@@ -442,10 +459,12 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
           <View style={{ flex: 1, justifyContent: "center" }}>
             <TVSeriesHeader item={item} />
 
-            {/* Action buttons */}
+            {/* Action buttons. Wrapped: with Seerr's request beside them, the
+                row can outgrow the column the poster leaves. */}
             <View
               style={{
                 flexDirection: "row",
+                flexWrap: "wrap",
                 gap: scaleSize(16),
                 marginTop: scaleSize(32),
               }}
@@ -523,7 +542,20 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
               )}
 
               <TVFavoriteButton item={item} disabled={isSeasonModalVisible} />
+
+              {seerr.offersRequest && (
+                <TVSeerrRequestSeasonsButton
+                  onPress={seerr.requestSeasons}
+                  disabled={isSeasonModalVisible}
+                  refSetter={seerr.setButtonRef}
+                />
+              )}
             </View>
+
+            <TVSeerrMissingSeasons
+              seasons={seerr.seasons}
+              offersRequest={seerr.offersRequest}
+            />
           </View>
 
           {/* Right side - Poster */}

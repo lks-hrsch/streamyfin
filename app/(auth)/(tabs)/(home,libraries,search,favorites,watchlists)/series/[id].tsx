@@ -21,6 +21,7 @@ import {
   SeasonPicker,
   seasonIndexAtom,
 } from "@/components/series/SeasonPicker";
+import { SeerrMissingSeasons } from "@/components/series/SeerrMissingSeasons";
 import { SeriesHeader } from "@/components/series/SeriesHeader";
 import { TVSeriesPage } from "@/components/series/TVSeriesPage";
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
@@ -301,6 +302,10 @@ const page: React.FC = () => {
             <View className='mb-4'>
               <NextUp seriesId={seriesId} />
             </View>
+          )}
+          {/* Seerr is a server: nothing to ask it offline. */}
+          {!isOffline && (
+            <SeerrMissingSeasons item={item} episodes={allEpisodes} />
           )}
           {allEpisodes !== undefined && (
             <SeasonPicker item={item} initialSeasonIndex={initialSeasonIndex} />
