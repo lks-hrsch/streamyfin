@@ -209,6 +209,13 @@ export const CORRECTIONS: Record<string, Correction> = {
     note: "Same under-declared MediaInfo as the discover rows, on every result.",
   },
 
+  "GET /collection/{collectionId}": {
+    ...none,
+    measured: "2026-10-16",
+    underDeclared: ["parts[].mediaInfo"],
+    note: "Each part is a film as Discover serves one, with the library's view of it in the same under-declared MediaInfo.",
+  },
+
   "GET /person/{personId}/combined_credits": {
     ...none,
     measured: "2026-09-21",
@@ -401,6 +408,11 @@ export const ALWAYS_SENT = {
     route: "GET /person/{personId}/combined_credits",
     at: "cast[]",
     keys: ["id", "mediaType"],
+  },
+  CollectionDetails: {
+    route: "GET /collection/{collectionId}",
+    at: "",
+    keys: ["id", "name", "parts"],
   },
   Cast: {
     route: "GET /movie/{movieId}",

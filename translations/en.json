@@ -1139,6 +1139,10 @@
     "number_episodes_one": "{{count}} episode",
     "number_episodes_other": "{{count}} episodes",
     "born": "Born",
+    "library_links": {
+      "more_on_seerr": "More on Seerr",
+      "missing_from_collection": "Missing from this collection"
+    },
     "appearances": "Appearances",
     "approve": "Approve",
     "decline": "Decline",

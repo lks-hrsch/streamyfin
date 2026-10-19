@@ -6,6 +6,7 @@ import { HEADER_ICON_SIZE } from "@/components/common/HeaderButton";
 import { HeaderIcon } from "@/components/common/HeaderIcon";
 import { PlatformDropdown } from "@/components/PlatformDropdown";
 import {
+  commonScreenOptions,
   nestedTabPageScreenOptions,
   stackScreenOptions,
 } from "@/components/stacks/NestedTabPageStack";
@@ -229,6 +230,22 @@ export default function IndexLayout() {
           headerTransparent: Platform.OS === "ios",
           headerShadowVisible: false,
         }}
+      />
+      {/* Seerr's pages, as the Search tab has them: a library person or
+          collection opens them in this tab, where they would otherwise get
+          the stack's default header, titled with the route's name. */}
+      <Stack.Screen name='seerr/page' options={commonScreenOptions} />
+      <Stack.Screen
+        name='seerr/person/[personId]'
+        options={commonScreenOptions}
+      />
+      <Stack.Screen
+        name='seerr/company/[companyId]'
+        options={commonScreenOptions}
+      />
+      <Stack.Screen
+        name='seerr/genre/[genreId]'
+        options={commonScreenOptions}
       />
     </Stack>
   );

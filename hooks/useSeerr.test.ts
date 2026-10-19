@@ -111,3 +111,21 @@ describe("SeerrApi.test", () => {
     expect(mockToastError).not.toHaveBeenCalled();
   });
 });
+
+// The path the spec names, under the API's prefix: anything else answers
+// Seerr's 404, and a collection's missing films would quietly never show.
+describe("SeerrApi.collectionDetails", () => {
+  test("asks for the collection by its TMDB number", async () => {
+    const collection = { id: 10, name: "Star Wars Collection", parts: [] };
+    const api = answering(JSON.stringify(collection));
+    const adapter = api.axios.defaults.adapter as AxiosAdapter;
+    let asked: string | undefined;
+    api.axios.defaults.adapter = async (config) => {
+      asked = config.url;
+      return adapter(config);
+    };
+
+    expect(await api.collectionDetails(10)).toEqual(collection);
+    expect(asked).toBe("/api/v1/collection/10");
+  });
+});
