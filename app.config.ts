@@ -82,6 +82,18 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     androidConfig.googleServicesFile = process.env.GOOGLE_SERVICES_JSON;
   }
 
+  // CI reads the latest TestFlight build number and sets this before prebuild,
+  // so the app's literal CFBundleVersion is already the next one when Xcode runs.
+  const iosBuildNumber = process.env.IOS_BUILD_NUMBER;
+  if (iosBuildNumber !== undefined) {
+    if (!/^[1-9]\d*$/.test(iosBuildNumber)) {
+      throw new Error(
+        `IOS_BUILD_NUMBER must be a positive integer, got "${iosBuildNumber}"`,
+      );
+    }
+    config.ios = { ...config.ios, buildNumber: iosBuildNumber };
+  }
+
   config.extra = { ...config.extra, build: buildMeta };
 
   return {
