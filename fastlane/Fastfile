@@ -92,8 +92,8 @@ platform :ios do
     dry = opts[:dry_run].to_s == "true"
     api_key = asc_key
 
-    # Default too: sigh installs Apple's WWDR intermediates into the default
-    # keychain and decodes profiles through it. delete_keychain restores the old one.
+    # Default too: sigh decodes profiles through the default keychain.
+    # delete_keychain restores the old one.
     create_keychain(
       name: KEYCHAIN,
       password: ENV.fetch("KC_PW"),
@@ -104,6 +104,8 @@ platform :ios do
       add_to_search_list: true
     )
     begin
+      # codesign needs Apple's WWDR intermediates to chain the certificate to its root.
+      FastlaneCore::CertChecker.install_missing_wwdr_certificates(in_keychain: FastlaneCore::Helper.keychain_path(KEYCHAIN))
       import_p12(ENV.fetch("DIST_P12_B64"), ENV.fetch("DIST_P12_PW"))
       # TEMPORARY diagnostics, drop this commit before merging.
       ["security list-keychains -d user", "security default-keychain",
