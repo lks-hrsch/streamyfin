@@ -108,26 +108,11 @@ platform :ios do
       FastlaneCore::CertChecker.install_missing_wwdr_certificates(in_keychain: FastlaneCore::Helper.keychain_path(KEYCHAIN))
       import_p12(ENV.fetch("DIST_P12_B64"), ENV.fetch("DIST_P12_PW"))
       # TEMPORARY diagnostics, drop this commit before merging.
-      kc = FastlaneCore::Helper.keychain_path(KEYCHAIN).shellescape
-      pem = File.join(Dir.tmpdir, "ci-dist.pem")
       bin = File.join(Dir.tmpdir, "ci-codesign-test")
-      File.write(pem, `security find-certificate -c "iPhone Distribution" -p #{kc}`)
-      ["security find-identity -v -p codesigning",
-       "/usr/bin/openssl x509 -in #{pem} -noout -subject -issuer -enddate",
-       "security find-certificate -a #{kc} | grep labl",
-       "security verify-cert -c #{pem} -p codeSign -k #{kc}",
-       "cp /usr/bin/true #{bin} && /usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 #{bin}",
-       "/usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 --keychain #{kc} #{bin}",
-       "launchctl managername; echo SECURITYSESSIONID=$SECURITYSESSIONID",
-       "security list-keychains; security list-keychains -d system; security list-keychains -d common",
-       "security verify-cert -c #{pem} -p codeSign",
-       "security show-keychain-info #{kc}",
-       "/usr/bin/codesign -f --timestamp=none -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 #{bin}",
-       "security unlock-keychain -p \"$KC_PW\" #{kc} && /usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 #{bin}",
-       "security dump-trust-settings; security dump-trust-settings -d"].each do |cmd|
+      ["launchctl managername", "security find-identity -v -p codesigning",
+       "cp /usr/bin/true #{bin} && /usr/bin/codesign -f -s 'iPhone Distribution' #{bin}"].each do |cmd|
         UI.message("diag $ #{cmd}\n#{`#{cmd} 2>&1`}(exit #{$?.exitstatus})")
       end
-      UI.user_error!("diag: stop before the archive")
 
       profiles = {}
       signable_targets(PROJECT).each do |t|
