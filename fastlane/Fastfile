@@ -131,6 +131,11 @@ platform :ios do
     )
     begin
       import_p12(ENV.fetch("DIST_P12_B64"), ENV.fetch("DIST_P12_PW"))
+      # TEMPORARY diagnostics, drop this commit before merging.
+      ["security list-keychains -d user", "security default-keychain",
+       "security find-identity -v -p codesigning"].each do |cmd|
+        UI.message("diag $ #{cmd}\n#{`#{cmd} 2>&1`}")
+      end
 
       profiles = {}
       signable_targets(PROJECT).each do |t|

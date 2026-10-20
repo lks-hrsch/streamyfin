@@ -17,7 +17,9 @@ concurrency:
 
 on:
   push:
-    branches: [main]
+    # TEMPORARY, drop this commit before merging: the branch under test runs as
+    # a dry run (never uploads).
+    branches: [main, ci/apple-pipeline]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -29,7 +31,7 @@ jobs:
   build:
     name: 🚀 ${{ matrix.name }}
     # A manual run from another branch would read the 1Password secrets too.
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci/apple-pipeline'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     # Per-target approval gate: each matrix job waits on its own environment,
@@ -52,7 +54,7 @@ jobs:
             runner: [self-hosted, macOS, ARM64, xcode-27.1]
             environment: production-tvos
     env:
-      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      DRY_RUN: ${{ github.ref == 'refs/heads/ci/apple-pipeline' && 'true' || inputs.dry_run || 'false' }}
       DEVELOPER_DIR: /Applications/Xcode-27.1.app/Contents/Developer
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       EXPO_TV: ${{ matrix.target == 'tvos' && '1' || '0' }}
