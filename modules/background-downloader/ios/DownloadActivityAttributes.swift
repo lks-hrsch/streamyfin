@@ -15,6 +15,10 @@ public enum DownloadActivityState: String, Codable, Hashable {
 #if os(iOS)
   import ActivityKit
 
+  // ActivityAttributes is unavailable on Mac Catalyst, which has no Live Activities. The shared
+  // container below stays: the Mac build declares no App Group, so it resolves to nil there and the
+  // download store falls back to the standard defaults.
+  #if !targetEnvironment(macCatalyst)
   /// Shared between two targets:
   ///   • the app, via the `BackgroundDownloader` pod (this whole `ios/` dir is `source_files`)
   ///   • the `StreamyfinDownloadActivity` widget extension, which `plugins/withDownloadLiveActivity.ts`
@@ -28,9 +32,6 @@ public enum DownloadActivityState: String, Codable, Hashable {
   /// queued downloads start from background wake-ups. The one activity is therefore created for the
   /// first download and *rebound* to each subsequent one via `activity.update`, which has no
   /// foreground restriction — possible only if everything episode-specific is mutable.
-  // ActivityAttributes is unavailable on Mac Catalyst, which has no Live Activities; the shared
-  // container below stays, the download store reads it there too.
-  #if !targetEnvironment(macCatalyst)
   @available(iOS 16.1, *)
   public struct DownloadActivityAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {

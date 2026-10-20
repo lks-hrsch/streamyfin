@@ -1,4 +1,4 @@
-import { NativeModules } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import * as GoogleCast from "react-native-google-cast";
 
 /**
@@ -15,7 +15,9 @@ import * as GoogleCast from "react-native-google-cast";
  */
 export * from "react-native-google-cast";
 
-export const isCastAvailable = NativeModules.RNGCCastContext != null;
+// Never on a TV: Android TV links the Cast module but casts nothing itself.
+export const isCastAvailable =
+  !Platform.isTV && NativeModules.RNGCCastContext != null;
 
 const nothing = () => null;
 

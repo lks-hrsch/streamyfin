@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-08
 **Category**: build
-**Key files**: `plugins/withMacCatalyst.ts`, `scripts/ios/mpvkit-catalyst.ts`, `app.config.ts`, `packages/react-native-google-cast.ts`
+**Key files**: `plugins/withMacCatalyst.ts`, `plugins/mac-catalyst/macEntitlements.ts`, `scripts/ios/mpvkit-catalyst.ts`, `scripts/ios/build-mac.ts`, `app.config.ts`, `packages/react-native-google-cast.ts`
 
 ## Detail
 
@@ -40,3 +40,21 @@ first; they are not cosmetic:
   declare its own `UIApplicationSceneManifest`, or that option refuses to prebuild.
 - `expo-build-properties` writes `EXPO_USE_PRECOMPILED_MODULES` itself, so precompiled
   modules are switched off in its options (app.config.ts), not in the Podfile properties.
+- **The Mac plugin's mods must run last.** Expo runs a mod type's plugins in reverse
+  list order, so `app.config.ts` puts `withMacCatalyst` first (`unshift`). Pushed last, its
+  mods run before every other plugin's and see neither the Live Activity widget extension it
+  filters to iOS nor the final entitlements it derives the Mac's from.
+- **The Mac signs with its own entitlements** (`<Project>.macos.entitlements`, wired through
+  `CODE_SIGN_ENTITLEMENTS[sdk=macosx*]`, derived in `plugins/mac-catalyst/macEntitlements.ts`).
+  A Mac App Store build needs App Sandbox, and the sandbox blocks networking without
+  `network.client`. The iOS App Group is dropped: it only shares state with the Live Activity
+  widget, which the Mac lacks, and a Mac App Group needs the team-prefixed form. Push becomes
+  `com.apple.developer.aps-environment`, the macOS key. The iOS-only Info.plist keys (Live
+  Activities, the App Group id) are removed too, so the downloader falls back to standard
+  defaults.
+- **Archive with system tools first in PATH.** `bun run mac --archive` runs Xcode's
+  install step, which calls `chown -RH` through PATH. GNU coreutils' chown (a Nix or Homebrew
+  profile ahead of `/usr/sbin`) fails on the dangling symlinks in
+  `ReactCodegen.framework` with "cannot dereference", so the archive fails on
+  `SetOwnerAndGroup`. BSD chown does not; run it as
+  `PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" bun run mac --archive`.
