@@ -55,8 +55,7 @@ nix develop --command pod install --project-directory=ios
 nix develop --command fastlane ios release target:ios dry_run:true
 ```
 
-Use `EXPO_TV=1` and `target:tvos` for tvOS. `fastlane ios signing_targets target:ios` needs
-no secrets and lists every target that gets its own profile.
+Use `EXPO_TV=1` and `target:tvos` for tvOS.
 
 ## Adding Android
 

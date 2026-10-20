@@ -2,12 +2,6 @@ require "xcodeproj"
 
 # fastlane runs lanes from fastlane/, so anchor every path at the repo root.
 ROOT = File.expand_path("..", FastlaneCore::FastlaneFolder.path)
-ASC_ENV = %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8].freeze
-
-def preflight(keys)
-  missing = keys.select { |k| ENV[k].to_s.empty? }
-  UI.user_error!("Missing env: #{missing.join(', ')}") unless missing.empty?
-end
 
 def asc_key
   # 1Password turns pasted newlines into spaces, so the key may arrive as base64.
@@ -37,17 +31,10 @@ platform :ios do
   # macOS appends "-db" to the path it is given, so the ".keychain" suffix is what
   # makes the file ci-signing.keychain-db, the name the workflow cleanup deletes.
   KEYCHAIN = "ci-signing.keychain"
-  KEYCHAIN_FILE = File.expand_path("~/Library/Keychains/#{KEYCHAIN}-db")
   SIGNABLE_PRODUCT_TYPES = %w[
     com.apple.product-type.application
     com.apple.product-type.app-extension
   ].freeze
-  SIGNING_ENV = (ASC_ENV + %w[DIST_P12_B64 DIST_P12_PW KC_PW APPLE_TEAM_ID IOS_BUILD_NUMBER]).freeze
-
-  def target_config(opts)
-    target = opts[:target].to_s
-    TARGETS.fetch(target) { UI.user_error!("target must be one of #{TARGETS.keys.join(', ')}, got '#{target}'") }
-  end
 
   # The app and each extension need their own profile. Read them from the project
   # instead of hard coding, so a new extension is signed without touching this file.
@@ -82,8 +69,7 @@ platform :ios do
   # Prints the next TestFlight build number and exports it as IOS_BUILD_NUMBER for
   # the steps after it (app.config.ts reads it before prebuild).
   lane :build_number do |opts|
-    tc = target_config(opts)
-    preflight(ASC_ENV)
+    tc = TARGETS.fetch(opts[:target])
     # initial_build_number 0 makes a first upload 1; a failed lookup raises instead
     # of silently restarting the count.
     latest = latest_testflight_build_number(
@@ -100,24 +86,12 @@ platform :ios do
     next_number
   end
 
-  # fastlane ios signing_targets target:ios
-  # Needs no secrets, only a prebuilt ios/. Prints one `target=bundle_id` per line.
-  lane :signing_targets do |opts|
-    target_config(opts)
-    signable_targets(PROJECT).each { |t| puts "#{t[:target]}=#{t[:bundle_id]}" }
-  end
-
   # fastlane ios release target:ios [dry_run:true]
   lane :release do |opts|
-    tc = target_config(opts)
+    tc = TARGETS.fetch(opts[:target])
     dry = opts[:dry_run].to_s == "true"
-    preflight(SIGNING_ENV)
     api_key = asc_key
 
-    # A killed run leaves its keychain, with the private key, behind.
-    Dir.glob(File.expand_path("~/Library/Keychains/ci-signing*")).each do |path|
-      delete_keychain(keychain_path: path)
-    end
     # Default too: sigh installs Apple's WWDR intermediates into the default
     # keychain and decodes profiles through it. delete_keychain restores the old one.
     create_keychain(
@@ -182,11 +156,7 @@ platform :ios do
         )
       end
     ensure
-      begin
-        delete_keychain(keychain_path: KEYCHAIN_FILE) if File.exist?(KEYCHAIN_FILE)
-      rescue StandardError => e
-        UI.important("Could not delete #{KEYCHAIN} keychain: #{e.message}")
-      end
+      delete_keychain(name: KEYCHAIN)
     end
   end
 end

@@ -147,11 +147,3 @@ jobs:
           name: streamyfin-${{ matrix.target }}
           path: build/${{ matrix.target }}/*.ipa
           retention-days: 14
-
-      - name: 📤 Upload build logs
-        if: failure() && matrix.platform == 'ios'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: logs-${{ matrix.target }}
-          path: ~/Library/Logs/gym/
-          retention-days: 7
