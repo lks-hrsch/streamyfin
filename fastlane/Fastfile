@@ -108,10 +108,19 @@ platform :ios do
       FastlaneCore::CertChecker.install_missing_wwdr_certificates(in_keychain: FastlaneCore::Helper.keychain_path(KEYCHAIN))
       import_p12(ENV.fetch("DIST_P12_B64"), ENV.fetch("DIST_P12_PW"))
       # TEMPORARY diagnostics, drop this commit before merging.
-      ["security list-keychains -d user", "security default-keychain",
-       "security find-identity -v -p codesigning"].each do |cmd|
-        UI.message("diag $ #{cmd}\n#{`#{cmd} 2>&1`}")
+      kc = FastlaneCore::Helper.keychain_path(KEYCHAIN).shellescape
+      pem = File.join(Dir.tmpdir, "ci-dist.pem")
+      bin = File.join(Dir.tmpdir, "ci-codesign-test")
+      File.write(pem, `security find-certificate -c "iPhone Distribution" -p #{kc}`)
+      ["security find-identity -v -p codesigning",
+       "/usr/bin/openssl x509 -in #{pem} -noout -subject -issuer -enddate",
+       "security find-certificate -a #{kc} | grep labl",
+       "security verify-cert -c #{pem} -p codeSign -k #{kc}",
+       "cp /usr/bin/true #{bin} && /usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 #{bin}",
+       "/usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 --keychain #{kc} #{bin}"].each do |cmd|
+        UI.message("diag $ #{cmd}\n#{`#{cmd} 2>&1`}(exit #{$?.exitstatus})")
       end
+      UI.user_error!("diag: stop before the archive")
 
       profiles = {}
       signable_targets(PROJECT).each do |t|
