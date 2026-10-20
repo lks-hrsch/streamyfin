@@ -117,7 +117,14 @@ platform :ios do
        "security find-certificate -a #{kc} | grep labl",
        "security verify-cert -c #{pem} -p codeSign -k #{kc}",
        "cp /usr/bin/true #{bin} && /usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 #{bin}",
-       "/usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 --keychain #{kc} #{bin}"].each do |cmd|
+       "/usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 --keychain #{kc} #{bin}",
+       "launchctl managername; echo SECURITYSESSIONID=$SECURITYSESSIONID",
+       "security list-keychains; security list-keychains -d system; security list-keychains -d common",
+       "security verify-cert -c #{pem} -p codeSign",
+       "security show-keychain-info #{kc}",
+       "/usr/bin/codesign -f --timestamp=none -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 #{bin}",
+       "security unlock-keychain -p \"$KC_PW\" #{kc} && /usr/bin/codesign -f -s F67C39407A4238C8B5AFABE32045A0CBC65AE5E3 #{bin}",
+       "security dump-trust-settings; security dump-trust-settings -d"].each do |cmd|
         UI.message("diag $ #{cmd}\n#{`#{cmd} 2>&1`}(exit #{$?.exitstatus})")
       end
       UI.user_error!("diag: stop before the archive")
