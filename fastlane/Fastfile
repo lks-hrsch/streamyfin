@@ -107,12 +107,6 @@ platform :ios do
       # codesign needs Apple's WWDR intermediates to chain the certificate to its root.
       FastlaneCore::CertChecker.install_missing_wwdr_certificates(in_keychain: FastlaneCore::Helper.keychain_path(KEYCHAIN))
       import_p12(ENV.fetch("DIST_P12_B64"), ENV.fetch("DIST_P12_PW"))
-      # TEMPORARY diagnostics, drop this commit before merging.
-      bin = File.join(Dir.tmpdir, "ci-codesign-test")
-      ["launchctl managername", "security find-identity -v -p codesigning",
-       "cp /usr/bin/true #{bin} && /usr/bin/codesign -f -s 'iPhone Distribution' #{bin}"].each do |cmd|
-        UI.message("diag $ #{cmd}\n#{`#{cmd} 2>&1`}(exit #{$?.exitstatus})")
-      end
 
       profiles = {}
       signable_targets(PROJECT).each do |t|

@@ -17,8 +17,7 @@ concurrency:
 
 on:
   push:
-    # TEMPORARY, drop this commit before merging: the branch under test runs as
-    # a dry run (never uploads).
+    # TEMPORARY, remove before merging: the branch under test uploads too.
     branches: [main, ci/apple-pipeline]
   workflow_dispatch:
     inputs:
@@ -54,7 +53,7 @@ jobs:
             runner: [self-hosted, macOS, ARM64, xcode-27.1]
             environment: production-tvos
     env:
-      DRY_RUN: ${{ github.ref == 'refs/heads/ci/apple-pipeline' && 'true' || inputs.dry_run || 'false' }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
       DEVELOPER_DIR: /Applications/Xcode-27.1.app/Contents/Developer
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       EXPO_TV: ${{ matrix.target == 'tvos' && '1' || '0' }}
