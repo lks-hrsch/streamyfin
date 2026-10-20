@@ -1,9 +1,18 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import plist from "@expo/plist";
 import {
   type ConfigPlugin,
+  withEntitlementsPlist,
   withInfoPlist,
   withPodfile,
   withXcodeProject,
 } from "expo/config-plugins";
+import {
+  IOS_ONLY_INFO_PLIST_KEYS,
+  MAC_ENTITLEMENTS_SUFFIX,
+  macEntitlements,
+} from "./mac-catalyst/macEntitlements";
 
 /**
  * Expo modules that do not build for Mac Catalyst. Expo autolinking ignores
@@ -119,6 +128,8 @@ end
  * - Pods follow the app into Catalyst, and the Podfile and its generated files
  *   get the fixes listed at CATALYST_PODS_SNIPPET and CATALYST_XCCONFIG_SNIPPET.
  * - App extensions (the iOS-only Live Activity widget) are filtered to iOS.
+ * - The Mac signs with entitlements of its own (App Sandbox, network client,
+ *   nothing Live Activity related), see plugins/mac-catalyst/macEntitlements.ts.
  * - Apple Silicon only, see CATALYST_PODS_SNIPPET.
  *
  * Elsewhere: Google Cast leaves autolinking in react-native.config.js, Expo's
@@ -154,6 +165,24 @@ const withMacCatalyst: ConfigPlugin = (config) => {
   config = withInfoPlist(config, (mod) => {
     mod.modResults.LSApplicationCategoryType =
       "public.app-category.entertainment";
+    for (const key of IOS_ONLY_INFO_PLIST_KEYS) delete mod.modResults[key];
+    return mod;
+  });
+
+  // Writes the Mac's own entitlements next to the iOS ones, from the iOS ones
+  // as every other plugin left them (this plugin's mods run last, see
+  // app.config.ts). The iOS file itself stays untouched.
+  config = withEntitlementsPlist(config, (mod) => {
+    if (mod.modRequest.introspect) return mod;
+    const { platformProjectRoot, projectName } = mod.modRequest;
+    writeFileSync(
+      join(
+        platformProjectRoot,
+        projectName!,
+        `${projectName}${MAC_ENTITLEMENTS_SUFFIX}`,
+      ),
+      plist.build(macEntitlements(mod.modResults)),
+    );
     return mod;
   });
 
@@ -174,6 +203,8 @@ const withMacCatalyst: ConfigPlugin = (config) => {
       // twin that needs its own registration.
       settings.DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = "NO";
       settings['"EXCLUDED_ARCHS[sdk=macosx*]"'] = "x86_64";
+      settings['"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]"'] =
+        `${mod.modRequest.projectName}/${mod.modRequest.projectName}${MAC_ENTITLEMENTS_SUFFIX}`;
     }
 
     for (const { value } of app.firstTarget.dependencies ?? []) {

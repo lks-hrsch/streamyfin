@@ -108,7 +108,11 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig => {
         };
       }
     }
-    config.plugins?.push("./plugins/withMacCatalyst.ts");
+    // First in the list so its mods run last (Expo runs a mod type's plugins
+    // in reverse order): the Live Activity widget extension and the app's
+    // entitlements have to exist before it filters the one to iOS and derives
+    // the Mac's entitlements from the other.
+    config.plugins?.unshift("./plugins/withMacCatalyst.ts");
   }
 
   // Sentry source-map/dSYM upload needs SENTRY_AUTH_TOKEN; without it the

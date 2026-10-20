@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { Pressable as GesturePressable } from "react-native-gesture-handler";
@@ -70,8 +71,17 @@ const getColorClasses = (
   }
 };
 
+// React Native's TouchableOpacity loses presses in the Mac build (Catalyst)
+// where it sits in a native header; Gesture Handler's Pressable gets them (see
+// .claude/learned-facts/macos-header-buttons-fix.md). Only the Mac takes it, so
+// iOS and Android keep their touch feedback as it was.
+const Touchable: typeof TouchableOpacity =
+  Platform.OS === "ios" && Platform.isMacCatalyst
+    ? (GesturePressable as unknown as typeof TouchableOpacity)
+    : TouchableOpacity;
+
 export interface ButtonProps
-  extends React.ComponentProps<typeof GesturePressable> {
+  extends React.ComponentProps<typeof TouchableOpacity> {
   onPress?: () => void;
   className?: string;
   textClassName?: string;
@@ -162,14 +172,9 @@ export const Button: React.FC<PropsWithChildren<ButtonProps>> = ({
       </Animated.View>
     </Pressable>
   ) : (
-    // React Native's own TouchableOpacity never receives press events when the
-    // iOS build runs on macOS ("Designed for iPad" / Catalyst), so every button
-    // built on it is dead there. Same defect this repo already fixed for header
-    // buttons; see .claude/learned-facts/macos-header-buttons-fix.md. Gesture
-    // Handler's Pressable does get them, and GestureHandlerRootView already
-    // wraps the app (app/_layout.tsx). className survives the swap because
-    // NativeWind v2 rewrites it to style in Babel, independent of the component.
-    <GesturePressable
+    // className survives the swap on the Mac because NativeWind v2 rewrites it
+    // to style in Babel, independent of the component.
+    <Touchable
       className={`
         p-3 rounded-xl items-center justify-center
         ${(loading || disabled) && "opacity-50"}
@@ -217,6 +222,6 @@ export const Button: React.FC<PropsWithChildren<ButtonProps>> = ({
           {iconRight ?? (justify === "between" && <View className='w-4' />)}
         </View>
       )}
-    </GesturePressable>
+    </Touchable>
   );
 };
