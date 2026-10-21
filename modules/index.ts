@@ -3,7 +3,9 @@ export type {
   ActiveDownload,
   DownloadCompleteEvent,
   DownloadErrorEvent,
+  DownloadPausedEvent,
   DownloadProgressEvent,
+  DownloadResumedEvent,
   DownloadStartedEvent,
 } from "./background-downloader";
 export { default as BackgroundDownloader } from "./background-downloader";
@@ -75,6 +77,11 @@ export {
   updateNativePlayerSyncPlay,
   updateNativePlayerTrackMenus,
 } from "./mpv-player";
+// Notification settings link (iOS)
+export {
+  addSettingsOpenListener,
+  takePendingSettingsOpen,
+} from "./notification-settings-link";
 // System volume (iOS, tvOS, Android, Android TV)
 export type { SystemVolumeChangeEvent } from "./system-volume";
 export {

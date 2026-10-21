@@ -22,9 +22,17 @@ describe("OFFICIAL_APPLICATION_IDS", () => {
     expect(OFFICIAL_APPLICATION_IDS).toContain(expo.android.package);
   });
 
-  test("holds nothing else", () => {
+  // This fork keeps upstream's identifier next to its own, so a build of
+  // upstream's app is still told apart from a foreign one.
+  test("holds nothing else but upstream's identifier", () => {
     expect([...OFFICIAL_APPLICATION_IDS].sort()).toEqual(
-      [...new Set([expo.ios.bundleIdentifier, expo.android.package])].sort(),
+      [
+        ...new Set([
+          "com.fredrikburmester.streamyfin",
+          expo.ios.bundleIdentifier,
+          expo.android.package,
+        ]),
+      ].sort(),
     );
   });
 });

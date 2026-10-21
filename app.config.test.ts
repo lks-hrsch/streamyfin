@@ -22,29 +22,35 @@ const catalogTargetSdk = Number(
 
 const appJson = JSON.parse(readFileSync(join(__dirname, "app.json"), "utf8"));
 
-/** The targetSdkVersion pinned in the resolved config; the last entry wins at prebuild. */
-const pinnedTargetSdk = (tv: boolean): number | undefined => {
+/** The plugins of the resolved config, for a phone or a TV build. */
+const resolvedPlugins = (tv: boolean) => {
   const previous = process.env.EXPO_TV;
   process.env.EXPO_TV = tv ? "1" : "0";
   try {
-    const { plugins = [] } = resolveConfig({
-      config: structuredClone(appJson.expo),
-    } as ConfigContext);
-    const pins = plugins
-      .filter(
-        (
-          plugin,
-        ): plugin is [string, { android?: { targetSdkVersion?: number } }] =>
-          Array.isArray(plugin) && plugin[0] === "expo-build-properties",
-      )
-      .map(([, options]) => options?.android?.targetSdkVersion)
-      .filter((value) => value !== undefined);
-    return pins.at(-1);
+    return (
+      resolveConfig({
+        config: structuredClone(appJson.expo),
+      } as ConfigContext).plugins ?? []
+    );
   } finally {
     // Assigning undefined would store the string "undefined".
     if (previous === undefined) delete process.env.EXPO_TV;
     else process.env.EXPO_TV = previous;
   }
+};
+
+/** The targetSdkVersion pinned in the resolved config; the last entry wins at prebuild. */
+const pinnedTargetSdk = (tv: boolean): number | undefined => {
+  const pins = resolvedPlugins(tv)
+    .filter(
+      (
+        plugin,
+      ): plugin is [string, { android?: { targetSdkVersion?: number } }] =>
+        Array.isArray(plugin) && plugin[0] === "expo-build-properties",
+    )
+    .map(([, options]) => options?.android?.targetSdkVersion)
+    .filter((value) => value !== undefined);
+  return pins.at(-1);
 };
 
 describe.each([
@@ -65,6 +71,20 @@ describe.each([
   });
 });
 
+// Mods run in reverse order of registration. Registered after
+// react-native-google-cast, the edit ran before that plugin wrote the cast
+// options and found nothing to change, so iOS kept the TV playing again
+// without any build error.
+test("edits the iOS cast options after the Cast plugin has written them", () => {
+  const names = resolvedPlugins(false).map((plugin) =>
+    Array.isArray(plugin) ? plugin[0] : plugin,
+  );
+  const edit = names.indexOf("./plugins/withCastStopReceiverOnEnd.ts");
+
+  expect(edit).toBeGreaterThanOrEqual(0);
+  expect(edit).toBeLessThan(names.indexOf("react-native-google-cast"));
+});
+
 // app.config.ts registers the tsx require hook for the Expo CLI. Registered
 // from a spec, it lands on Node's own loader, which the Jest worker shares
 // with every spec it runs afterwards. The hook then outlives the spec that
@@ -82,4 +102,39 @@ test("loading the config leaves Node's module loader alone", () => {
     require("./app.config");
   });
   expect({ ...handlers }).toEqual(before);
+});
+
+/** Resolves the config with IOS_BUILD_NUMBER set to `value`, or unset for undefined. */
+const resolveWithBuildNumber = (value: string | undefined) => {
+  const previous = process.env.IOS_BUILD_NUMBER;
+  if (value === undefined) delete process.env.IOS_BUILD_NUMBER;
+  else process.env.IOS_BUILD_NUMBER = value;
+  try {
+    return resolveConfig({
+      config: structuredClone(appJson.expo),
+    } as ConfigContext);
+  } finally {
+    // Assigning undefined would store the string "undefined".
+    if (previous === undefined) delete process.env.IOS_BUILD_NUMBER;
+    else process.env.IOS_BUILD_NUMBER = previous;
+  }
+};
+
+describe("iOS build number from IOS_BUILD_NUMBER", () => {
+  test("is written to ios.buildNumber and keeps the other ios keys", () => {
+    const { ios } = resolveWithBuildNumber("42");
+    expect(ios?.buildNumber).toBe("42");
+    expect(ios?.bundleIdentifier).toBe("de.lkshrsch.streamyfin");
+  });
+
+  test("leaves ios.buildNumber alone when unset", () => {
+    expect(resolveWithBuildNumber(undefined).ios?.buildNumber).toBeUndefined();
+  });
+
+  test.each(["abc", "0", "1.2", "", "-3", "007"])(
+    "rejects %p instead of shipping a bad build number",
+    (value) => {
+      expect(() => resolveWithBuildNumber(value)).toThrow(/IOS_BUILD_NUMBER/);
+    },
+  );
 });

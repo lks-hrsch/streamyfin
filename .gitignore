@@ -85,9 +85,17 @@ coverage/
 !.claude/learned-facts.md
 .agents/skills/**
 skills-lock.json
+graphify-out/
 
 # CI-injected Google Play service account key (written at build time)
 google-service-account.json
 
 # direnv
 .direnv/
+
+# Apple release (fastlane)
+fastlane/report.xml
+fastlane/README.md
+
+# Reassure measurements
+.reassure/
