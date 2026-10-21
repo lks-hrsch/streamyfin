@@ -38,7 +38,8 @@ Read the relevant one before writing code in that area.
 
 Deep dives: [tv-modal-guide.md](docs/tv-modal-guide.md),
 [tv-focus-guide.md](docs/tv-focus-guide.md), [tv-discovery.md](docs/tv-discovery.md),
-[nested-modals.md](docs/nested-modals.md), [custom-headers.md](docs/custom-headers.md).
+[nested-modals.md](docs/nested-modals.md), [custom-headers.md](docs/custom-headers.md),
+[ci.md](docs/ci.md) (release pipeline, Apple builds on the self-hosted Mac).
 
 ## Learned facts
 
@@ -131,6 +132,9 @@ bun run test                 # The full gate: typecheck, unit, lint, format, i18
 
 # iOS specific
 bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build errors
+
+# Apple release (fastlane, run by .github/workflows/release.yml, see docs/ci.md)
+nix develop --command fastlane ios release target:ios dry_run:true
 ```
 
 ## Stack
@@ -160,6 +164,7 @@ bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build er
 | `packages/` | Local shims resolved by Metro |
 | `targets/` | Extra native targets (top shelf, download activity) |
 | `plugins/` | Expo config plugins |
+| `fastlane/` | Apple release lanes (build number, signing, TestFlight upload) |
 | `patches/` | Patch package overrides |
 | `augmentations/` | Type augmentations |
 | `test-utils/` | Shared test doubles: Jellyfin API, MMKV, the file system, custom headers, React Native, Reanimated |

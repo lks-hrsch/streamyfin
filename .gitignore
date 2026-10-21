@@ -92,3 +92,7 @@ google-service-account.json
 
 # direnv
 .direnv/
+
+# Apple release (fastlane)
+fastlane/report.xml
+fastlane/README.md

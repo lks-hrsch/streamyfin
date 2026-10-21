@@ -83,3 +83,38 @@ test("loading the config leaves Node's module loader alone", () => {
   });
   expect({ ...handlers }).toEqual(before);
 });
+
+/** Resolves the config with IOS_BUILD_NUMBER set to `value`, or unset for undefined. */
+const resolveWithBuildNumber = (value: string | undefined) => {
+  const previous = process.env.IOS_BUILD_NUMBER;
+  if (value === undefined) delete process.env.IOS_BUILD_NUMBER;
+  else process.env.IOS_BUILD_NUMBER = value;
+  try {
+    return resolveConfig({
+      config: structuredClone(appJson.expo),
+    } as ConfigContext);
+  } finally {
+    // Assigning undefined would store the string "undefined".
+    if (previous === undefined) delete process.env.IOS_BUILD_NUMBER;
+    else process.env.IOS_BUILD_NUMBER = previous;
+  }
+};
+
+describe("iOS build number from IOS_BUILD_NUMBER", () => {
+  test("is written to ios.buildNumber and keeps the other ios keys", () => {
+    const { ios } = resolveWithBuildNumber("42");
+    expect(ios?.buildNumber).toBe("42");
+    expect(ios?.bundleIdentifier).toBe("de.lkshrsch.streamyfin");
+  });
+
+  test("leaves ios.buildNumber alone when unset", () => {
+    expect(resolveWithBuildNumber(undefined).ios?.buildNumber).toBeUndefined();
+  });
+
+  test.each(["abc", "0", "1.2", "", "-3", "007"])(
+    "rejects %p instead of shipping a bad build number",
+    (value) => {
+      expect(() => resolveWithBuildNumber(value)).toThrow(/IOS_BUILD_NUMBER/);
+    },
+  );
+});
