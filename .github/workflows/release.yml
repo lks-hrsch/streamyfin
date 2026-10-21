@@ -44,17 +44,20 @@ jobs:
           - name: 🍎 iOS
             platform: ios
             target: ios
+            profile: production
             runner: [self-hosted, macOS, ARM64, xcode-27.1]
             environment: production-ios
           - name: 📺 tvOS
             platform: ios
             target: tvos
+            profile: production_tv
             runner: [self-hosted, macOS, ARM64, xcode-27.1]
             environment: production-tvos
     env:
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
       DEVELOPER_DIR: /Applications/Xcode-27.1.app/Contents/Developer
-      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      # utils/version.ts shows the plain store version only for a production profile.
+      EXPO_PUBLIC_BUILD_PROFILE: ${{ matrix.profile }}
       EXPO_TV: ${{ matrix.target == 'tvos' && '1' || '0' }}
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
@@ -134,16 +137,23 @@ jobs:
           KC_PW="$(openssl rand -hex 24)" nix develop --command \
             fastlane ${{ matrix.platform }} release target:${{ matrix.target }} dry_run:${{ env.DRY_RUN }}
 
-      # The lane deletes it too; this covers a cancelled or killed run.
+      # The lane deletes it too; this covers a cancelled or killed run, and points
+      # the default keychain back at login so it never names a deleted file.
       - name: 🧹 Remove temporary keychain
         if: always() && matrix.platform == 'ios'
-        run: security delete-keychain ci-signing.keychain-db 2>/dev/null || true
+        run: |
+          security delete-keychain "ci-signing-${{ github.run_id }}-${{ matrix.target }}.keychain-db" 2>/dev/null || true
+          security default-keychain -s login.keychain-db
 
+      # Also on failure: a signed .ipa whose TestFlight upload failed can be uploaded
+      # by hand instead of rebuilding.
       - name: 📤 Upload package (${{ matrix.name }})
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: streamyfin-${{ matrix.target }}
           path: build/${{ matrix.target }}/*.ipa
+          if-no-files-found: ignore
           retention-days: 14
 
       # fastlane's summary hides codesign errors; the full xcodebuild log has them.

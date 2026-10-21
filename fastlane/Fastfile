@@ -2,6 +2,10 @@ require "xcodeproj"
 
 # fastlane runs lanes from fastlane/, so anchor every path at the repo root.
 ROOT = File.expand_path("..", FastlaneCore::FastlaneFolder.path)
+# Team and bundle id come from app.json, the same source prebuild uses, so a rename
+# cannot upload to the wrong App Store Connect app.
+APP_IOS = JSON.parse(File.read(File.join(ROOT, "app.json"))).fetch("expo").fetch("ios")
+TEAM_ID = APP_IOS.fetch("appleTeamId")
 
 def asc_key
   # 1Password turns pasted newlines into spaces, so the key may arrive as base64.
@@ -23,14 +27,11 @@ platform :ios do
   PROJECT = File.join(ROOT, "ios/Streamyfin.xcodeproj")
   WORKSPACE = File.join(ROOT, "ios/Streamyfin.xcworkspace")
   SCHEME = "Streamyfin"
-  APP_BUNDLE_ID = "de.lkshrsch.streamyfin"
+  APP_BUNDLE_ID = APP_IOS.fetch("bundleIdentifier")
   TARGETS = {
     "ios"  => { sigh: "ios",  asc: "ios",       destination: "generic/platform=iOS" },
     "tvos" => { sigh: "tvos", asc: "appletvos", destination: "generic/platform=tvOS" },
   }.freeze
-  # macOS appends "-db" to the path it is given, so the ".keychain" suffix is what
-  # makes the file ci-signing.keychain-db, the name the workflow cleanup deletes.
-  KEYCHAIN = "ci-signing.keychain"
   SIGNABLE_PRODUCT_TYPES = %w[
     com.apple.product-type.application
     com.apple.product-type.app-extension
@@ -51,13 +52,21 @@ platform :ios do
     end
   end
 
-  def import_p12(b64, password)
+  # One keychain per run and target: the iOS and tvOS jobs can run at the same time
+  # on one Mac, and a shared name lets one job's cleanup delete the other's keychain.
+  # macOS appends "-db" to the path it is given, so the ".keychain" suffix is what
+  # makes the file <name>.keychain-db, the name the workflow cleanup deletes.
+  def keychain_name(target)
+    "ci-signing-#{ENV.fetch('GITHUB_RUN_ID', 'local')}-#{target}.keychain"
+  end
+
+  def import_p12(b64, password, keychain)
     path = File.join(Dir.tmpdir, "dist-#{Process.pid}.p12")
     File.binwrite(path, Base64.decode64(b64))
     import_certificate(
       certificate_path: path,
       certificate_password: password,
-      keychain_name: KEYCHAIN,
+      keychain_name: keychain,
       keychain_password: ENV.fetch("KC_PW"),
       log_output: false
     )
@@ -91,11 +100,12 @@ platform :ios do
     tc = TARGETS.fetch(opts[:target])
     dry = opts[:dry_run].to_s == "true"
     api_key = asc_key
+    keychain = keychain_name(opts[:target])
 
     # Default too: sigh decodes profiles through the default keychain.
     # delete_keychain restores the old one.
     create_keychain(
-      name: KEYCHAIN,
+      name: keychain,
       password: ENV.fetch("KC_PW"),
       default_keychain: true,
       unlock: true,
@@ -105,8 +115,8 @@ platform :ios do
     )
     begin
       # codesign needs Apple's WWDR intermediates to chain the certificate to its root.
-      FastlaneCore::CertChecker.install_missing_wwdr_certificates(in_keychain: FastlaneCore::Helper.keychain_path(KEYCHAIN))
-      import_p12(ENV.fetch("DIST_P12_B64"), ENV.fetch("DIST_P12_PW"))
+      FastlaneCore::CertChecker.install_missing_wwdr_certificates(in_keychain: FastlaneCore::Helper.keychain_path(keychain))
+      import_p12(ENV.fetch("DIST_P12_B64"), ENV.fetch("DIST_P12_PW"), keychain)
 
       profiles = {}
       signable_targets(PROJECT).each do |t|
@@ -121,7 +131,7 @@ platform :ios do
         update_code_signing_settings(
           path: PROJECT,
           use_automatic_signing: false,
-          team_id: ENV.fetch("APPLE_TEAM_ID"),
+          team_id: TEAM_ID,
           targets: [t[:target]],
           bundle_identifier: t[:bundle_id],
           code_sign_identity: "Apple Distribution",
@@ -136,7 +146,7 @@ platform :ios do
         scheme: SCHEME,
         destination: tc[:destination],
         export_method: "app-store",
-        export_team_id: ENV.fetch("APPLE_TEAM_ID"),
+        export_team_id: TEAM_ID,
         export_options: { provisioningProfiles: profiles },
         xcargs: "CURRENT_PROJECT_VERSION=#{ENV.fetch('IOS_BUILD_NUMBER')}",
         output_directory: File.join(ROOT, "build", opts[:target].to_s),
@@ -153,7 +163,7 @@ platform :ios do
         )
       end
     ensure
-      delete_keychain(name: KEYCHAIN)
+      delete_keychain(name: keychain)
     end
   end
 end

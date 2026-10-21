@@ -25,7 +25,8 @@ the lane passes it as `CURRENT_PROJECT_VERSION` so the extensions match the app.
 
 A nix-darwin Mac, labels `self-hosted, macOS, ARM64, xcode-27.1`, jobs run without sudo.
 Tools come from `nix develop` (pinned by `flake.lock`), Xcode from `DEVELOPER_DIR`. Signing
-uses a keychain created per run and deleted at the end. For that the runner must run in its
+uses a keychain created per run and target (`ci-signing-<run id>-<target>`) and deleted at
+the end, so the iOS and tvOS jobs can share the Mac. For that the runner must run in its
 user's launchd domain (`launchctl asuser`, `launchctl managername` prints `Background`), with
 `SessionCreate` and a writable `~/Library` at the user's recorded home. In the system domain
 codesign fails with `errSecInternalComponent`.
@@ -35,16 +36,16 @@ codesign fails with `errSecInternalComponent`.
 | Where | Name | Holds |
 | --- | --- | --- |
 | GitHub secret | `OP_SERVICE_ACCOUNT_TOKEN` | Read-only service account for vault `ci-streamyfin` |
-| GitHub variable | `APPLE_TEAM_ID` | Apple team ID |
 | 1Password `asc-api-key` | `key-id`, `issuer-id`, `credential` | App Store Connect API key; `credential` is the `.p8` text or its base64 |
 | 1Password `apple-distribution` | `p12-base64`, `credential` | Apple Distribution `.p12` in base64, and its password |
 
+The team and bundle id are read from `app.json` (`ios.appleTeamId`, `ios.bundleIdentifier`).
 Provisioning profiles are not stored: every run fetches or creates them with the API key.
 
 ## Run it locally
 
 ```bash
-export APPLE_TEAM_ID=BWMWYHN53X KC_PW="$(openssl rand -hex 24)"
+export KC_PW="$(openssl rand -hex 24)"
 export ASC_KEY_ID="$(op read op://ci-streamyfin/asc-api-key/key-id)"
 export ASC_ISSUER_ID="$(op read op://ci-streamyfin/asc-api-key/issuer-id)"
 export ASC_KEY_P8="$(op read op://ci-streamyfin/asc-api-key/credential)"
