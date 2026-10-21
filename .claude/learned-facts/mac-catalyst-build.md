@@ -58,3 +58,13 @@ first; they are not cosmetic:
   `ReactCodegen.framework` with "cannot dereference", so the archive fails on
   `SetOwnerAndGroup`. BSD chown does not; run it as
   `PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" bun run mac --archive`.
+- **SwiftUI menus keep only text from their label on the Mac.** @expo/ui's `Menu` with a
+  React Native view as label draws as a bordered pull-down button with nothing in it.
+  `PlatformDropdown` gives it `menuStyle("button")`, `buttonStyle("plain")` and
+  `menuIndicator("hidden")` on the Mac, so the trigger draws itself as on iOS.
+- **Header items live in the window toolbar.** A React Native `Modal` presented from a header
+  button never appears there, and the button group goes blank: present from the root instead
+  (the global sheet, see `PlayInRemoteSession`). And a menu opened in a modal over a screen
+  left that screen's toolbar items (back button included) missing after the modal closed,
+  until a scroll rebuilt them; `patches/react-native-screens@4.26.2.patch` re-applies the
+  header config on `viewDidAppear`, Catalyst only.
