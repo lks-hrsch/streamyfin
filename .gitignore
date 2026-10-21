@@ -96,3 +96,6 @@ google-service-account.json
 # Apple release (fastlane)
 fastlane/report.xml
 fastlane/README.md
+
+# Reassure measurements
+.reassure/
