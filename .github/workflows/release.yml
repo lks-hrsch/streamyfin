@@ -137,13 +137,12 @@ jobs:
           KC_PW="$(openssl rand -hex 24)" nix develop --command \
             fastlane ${{ matrix.platform }} release target:${{ matrix.target }} dry_run:${{ env.DRY_RUN }}
 
-      # The lane deletes it too; this covers a cancelled or killed run, and points
-      # the default keychain back at login so it never names a deleted file.
+      # The lane deletes it too; this covers a cancelled or killed run. The default
+      # keychain is left alone: the runner user has no login keychain to point it
+      # at, and each lane sets its own default and restores the previous one.
       - name: 🧹 Remove temporary keychain
         if: always() && matrix.platform == 'ios'
-        run: |
-          security delete-keychain "ci-signing-${{ github.run_id }}-${{ matrix.target }}.keychain-db" 2>/dev/null || true
-          security default-keychain -s login.keychain-db
+        run: security delete-keychain "ci-signing-${{ github.run_id }}-${{ matrix.target }}.keychain-db" 2>/dev/null || true
 
       # Also on failure: a signed .ipa whose TestFlight upload failed can be uploaded
       # by hand instead of rebuilding.
