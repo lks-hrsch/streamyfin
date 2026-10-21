@@ -25,8 +25,10 @@ the lane passes it as `CURRENT_PROJECT_VERSION` so the extensions match the app.
 
 A nix-darwin Mac, labels `self-hosted, macOS, ARM64, xcode-27.1`, jobs run without sudo.
 Tools come from `nix develop` (pinned by `flake.lock`), Xcode from `DEVELOPER_DIR`. Signing
-uses a keychain created per run and deleted at the end; the runner user needs its own
-security session (`SessionCreate`) and a writable `~/Library` for that.
+uses a keychain created per run and deleted at the end. For that the runner must run in its
+user's launchd domain (`launchctl asuser`, `launchctl managername` prints `Background`), with
+`SessionCreate` and a writable `~/Library` at the user's recorded home. In the system domain
+codesign fails with `errSecInternalComponent`.
 
 ## Secrets
 

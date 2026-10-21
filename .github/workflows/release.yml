@@ -17,8 +17,7 @@ concurrency:
 
 on:
   push:
-    # TEMPORARY, remove before merging: the branch under test uploads too.
-    branches: [main, ci/apple-pipeline]
+    branches: [main]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -30,7 +29,7 @@ jobs:
   build:
     name: 🚀 ${{ matrix.name }}
     # A manual run from another branch would read the 1Password secrets too.
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci/apple-pipeline'
+    if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     # Per-target approval gate: each matrix job waits on its own environment,
