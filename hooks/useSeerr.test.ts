@@ -44,6 +44,42 @@ const answering = (body: string) => {
   return api;
 };
 
+// A Seerr that refuses every request with `status` and `data`.
+const refusing = (status: number, data: unknown) => {
+  const api = new SeerrApi("https://seerr.example");
+  const adapter: AxiosAdapter = async (config) => {
+    throw new AxiosError("refused", "ERR_BAD_REQUEST", config, null, {
+      data,
+      status,
+      statusText: "",
+      headers: {},
+      config,
+    });
+  };
+  api.axios.defaults.adapter = adapter;
+  return api;
+};
+
+// The device had lost the session cookie while the Seerr user stayed stored:
+// Seerr answered every page 401, Discover and search stayed empty, and the
+// app went on as signed in, so it never signed in again.
+describe("a Seerr session the server does not have", () => {
+  test("is forgotten, so the app signs in again", async () => {
+    const user = { id: 7, displayName: "Lea" };
+    storage.setAny(SEERR_USER_STORAGE_KEY, user);
+    store.set(seerrUserAtom, user as never);
+
+    await refusing(401, {
+      message: "cookie 'connect.sid' required",
+    })
+      .discoverSettings()
+      .catch(() => undefined);
+
+    expect(storage.get(SEERR_USER_STORAGE_KEY)).toBeUndefined();
+    expect(store.get(seerrUserAtom)).toBeUndefined();
+  });
+});
+
 // What stands in front of a Seerr answers in its place, with a 200: a
 // proxy's login page, a URL that points at the web app rather than the API.
 // The body then reached Discover as the sliders and crashed its render
@@ -112,41 +148,5 @@ describe("SeerrApi.test", () => {
       requiresPass: false,
     });
     expect(mockToastError).not.toHaveBeenCalled();
-  });
-});
-
-// A Seerr that refuses every request with `status` and `data`.
-const refusing = (status: number, data: unknown) => {
-  const api = new SeerrApi("https://seerr.example");
-  const adapter: AxiosAdapter = async (config) => {
-    throw new AxiosError("refused", "ERR_BAD_REQUEST", config, null, {
-      data,
-      status,
-      statusText: "",
-      headers: {},
-      config,
-    });
-  };
-  api.axios.defaults.adapter = adapter;
-  return api;
-};
-
-// The device had lost the session cookie while the Seerr user stayed stored:
-// Seerr answered every page 401, Discover and search stayed empty, and the
-// app went on as signed in, so it never signed in again.
-describe("a Seerr session the server does not have", () => {
-  test("is forgotten, so the app signs in again", async () => {
-    const user = { id: 7, displayName: "Lea" };
-    storage.setAny(SEERR_USER_STORAGE_KEY, user);
-    store.set(seerrUserAtom, user as never);
-
-    await refusing(401, {
-      message: "cookie 'connect.sid' required",
-    })
-      .discoverSettings()
-      .catch(() => undefined);
-
-    expect(storage.get(SEERR_USER_STORAGE_KEY)).toBeUndefined();
-    expect(store.get(seerrUserAtom)).toBeUndefined();
   });
 });
