@@ -38,8 +38,9 @@ can do that without checking it out. The rest of the flow is in
   - Mac: `screencapture -o -l <window id> <file>` (the app's window only, never the screen)
   - Android and Android TV: `adb exec-out screencap -p > <file>`
 - **Attaching**: the images belong in the PR description, not links to local files. Without
-  a browser to drop them into GitHub's editor, push them to a branch of your fork that holds
-  only these assets (for example `pr-assets/<branch>`) and link them from there, so they never
-  enter the code history.
+  a browser to drop them into GitHub's editor, push them to the `pr-assets` branch of this
+  repository, one folder per PR (`pr-<number>/`), and link them from there. It is an orphan
+  branch that holds only these images, so they never enter the code history. Without push
+  access here, use a branch of your fork the same way.
 - **Updating a PR**: new images for whatever the update changed, and a comment that says what
   changed since the last review.
