@@ -1,28 +1,26 @@
-import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
-import { getItemsApi } from "@jellyfin/sdk/lib/utils/api";
 import { useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useSegments } from "expo-router";
 import { useAtom } from "jotai";
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Platform, useWindowDimensions, View } from "react-native";
 import { Image } from "@/components/common/ServerImage";
-import { InfiniteScrollingCollectionList } from "@/components/home/InfiniteScrollingCollectionList";
+import { Text } from "@/components/common/Text";
 import { Loader } from "@/components/Loader";
-import { MoviesTitleHeader } from "@/components/movies/MoviesTitleHeader";
 import { OverviewText } from "@/components/OverviewText";
 import {
   PARALLAX_HEADER_HEIGHT,
   ParallaxScrollView,
 } from "@/components/ParallaxPage";
-import { MoreOnSeerr } from "@/components/persons/MoreOnSeerr";
+import { PersonFilmographyRow } from "@/components/persons/PersonFilmographyRow";
 import { TVActorPage } from "@/components/persons/TVActorPage";
+import { usePersonFactLines } from "@/components/persons/usePersonFactLines";
+import { usePersonProfile } from "@/hooks/usePersonProfile";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import { getBackdropUrl } from "@/utils/jellyfin/image/getBackdropUrl";
 import { toImagePixels } from "@/utils/jellyfin/image/imagePixels";
 import { getUserItemData } from "@/utils/jellyfin/user-library/getUserItemData";
-
-const PAGE_SIZE = 16;
+import { opensSeerrPages } from "@/utils/seerr/libraryLinks";
 
 const page: React.FC = () => {
   const local = useLocalSearchParams();
@@ -55,32 +53,12 @@ const MobileActorPage: React.FC<{ personId: string }> = ({ personId }) => {
     staleTime: 60,
   });
 
-  const fetchItems = useCallback(
-    async ({ pageParam }: { pageParam: number }): Promise<BaseItemDto[]> => {
-      if (!api || !user?.Id) return [];
-
-      const response = await getItemsApi(api).getItems({
-        userId: user.Id,
-        personIds: [personId],
-        startIndex: pageParam,
-        limit: PAGE_SIZE,
-        sortOrder: ["Descending", "Descending", "Ascending"],
-        includeItemTypes: ["Movie", "Series"],
-        recursive: true,
-        fields: [
-          "ParentId",
-          "PrimaryImageAspectRatio",
-          "ParentId",
-          "PrimaryImageAspectRatio",
-        ],
-        sortBy: ["PremiereDate", "ProductionYear", "SortName"],
-        collapseBoxSetItems: false,
-      });
-
-      return response.data.Items ?? [];
-    },
-    [api, user?.Id, personId],
-  );
+  // Seerr's titles only where its pages open; see opensSeerrPages.
+  const from = (useSegments() as string[])[2];
+  const { facts, filmography, isLoading } = usePersonProfile(item, {
+    withSeerr: opensSeerrPages(from),
+  });
+  const factLines = usePersonFactLines(facts);
 
   const backdropUrl = useMemo(
     () =>
@@ -120,16 +98,26 @@ const MobileActorPage: React.FC<{ personId: string }> = ({ personId }) => {
     >
       <View className='flex flex-col space-y-4 my-4'>
         <View className='px-4 mb-4'>
-          <MoviesTitleHeader item={item} className='mb-4' />
-          <OverviewText text={item.Overview} />
-          <MoreOnSeerr person={item} className='mt-4' />
+          <Text selectable className='font-bold text-2xl mb-1'>
+            {item.Name}
+          </Text>
+          {factLines.map((line) => (
+            <Text key={line} className='opacity-50'>
+              {line}
+            </Text>
+          ))}
+          <OverviewText text={facts.biography} className='mt-4' />
         </View>
 
-        <InfiniteScrollingCollectionList
-          title={t("item_card.appeared_in")}
-          queryKey={["actor", "movies", personId]}
-          queryFn={fetchItems}
-          pageSize={PAGE_SIZE}
+        <PersonFilmographyRow
+          title={t("item_card.movies")}
+          entries={filmography.movies}
+          loading={isLoading}
+        />
+        <PersonFilmographyRow
+          title={t("item_card.shows")}
+          entries={filmography.shows}
+          loading={isLoading}
         />
       </View>
     </ParallaxScrollView>
