@@ -43,6 +43,12 @@ const UrlInUse = () => (
   <Text>{useServerUrl().isUsingLocalUrl ? "local" : "remote"}</Text>
 );
 
+/** Hands the provider's refreshUrlState out to the test on every render. */
+const Refresher = ({ expose }: { expose: (refresh: () => void) => void }) => {
+  expose(useServerUrl().refreshUrlState);
+  return null;
+};
+
 /** Mounts the provider and lets the SSID debounce run out. */
 const settle = async () => {
   await render(
@@ -116,13 +122,13 @@ describe("ServerUrlProvider", () => {
       ]),
     );
     let refresh = () => {};
-    const Refresher = () => {
-      refresh = useServerUrl().refreshUrlState;
-      return null;
-    };
     await render(
       <ServerUrlProvider>
-        <Refresher />
+        <Refresher
+          expose={(next) => {
+            refresh = next;
+          }}
+        />
       </ServerUrlProvider>,
     );
     await act(async () => {

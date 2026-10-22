@@ -51,7 +51,7 @@ export const TVOptionSelector = <T,>({
 
   const initialSelectedIndex = useMemo(() => {
     const idx = options.findIndex((o) => o.selected);
-    return idx >= 0 ? idx : 0;
+    return Math.max(idx, 0);
   }, [options]);
 
   useEffect(() => {
