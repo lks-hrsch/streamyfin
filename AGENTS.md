@@ -11,19 +11,30 @@ from the images in the PR, not from a build he runs. A PR is ready for review on
 can do that without checking it out. The rest of the flow is in
 [contributing-flow.md](docs/conventions/contributing-flow.md).
 
-- **Before and after screenshots for every UI change**, on every platform the change
-  reaches: iPhone, Apple TV, Android, Android TV, the Mac. The same screen with the same data
-  in the same state, side by side in a table, one row per platform. For a fix, "before" shows
-  the bug.
+- **Before and after screenshots for every UI change on iPhone, iPad, Apple TV (tvOS) and the
+  Mac (macOS)**, all four every time, also when the change looks platform-neutral: layouts
+  differ between them, and a reviewer cannot tell from the diff alone which of them it
+  reaches. A change to Android-specific code (Kotlin, `*.android.tsx`) adds Android and
+  Android TV. The same screen with the same data in the same state, side by side in a table,
+  one row per platform. For a fix, "before" shows the bug.
+- **Always the local test server, always its test user.** Screenshots, recordings and traces
+  come from [`e2e/test-server`](e2e/test-server/README.md) (`python3 e2e/test-server/setup.py`),
+  signed in as `streamyfin-test`. Never a personal or production server, never a real
+  account, never the test server's admin, not even for one quick shot. Before and after come
+  from the same server state, so the only difference in the images is the change. If a
+  screen needs data the test server lacks, add it to `setup.py` in the same PR instead of
+  using another server.
 - **A short video or GIF** for anything animated, for focus movement on TV, and for any flow
   longer than one screen.
 - **A caption per image** that says what to look at, not just which screen it is.
 - **Evidence for changes without a visible surface** (a request, a stored value, a log
   line): the trace or log excerpt before and after, instead of a screenshot.
-- **No personal data in images**: use a test server and test account. No access tokens,
-  server addresses, account names or a private library; crop or blur what cannot be avoided.
+- **No personal data in images**: with the test server that follows by itself. Check anyway
+  that no access token, personal server address, account name or private library is in
+  view.
 - **Capturing**:
-  - iOS and tvOS simulator: `xcrun simctl io <udid> screenshot <file>`
+  - iPhone, iPad and Apple TV simulators: `xcrun simctl io <udid> screenshot <file>`. One
+    build serves iPhone and iPad (`supportsTablet`); Apple TV needs the TV prebuild.
   - Mac: `screencapture -o -l <window id> <file>` (the app's window only, never the screen)
   - Android and Android TV: `adb exec-out screencap -p > <file>`
 - **Attaching**: the images belong in the PR description, not links to local files. Without
