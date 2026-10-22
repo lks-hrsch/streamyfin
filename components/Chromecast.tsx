@@ -7,7 +7,7 @@ import GoogleCast, {
   useDevices,
   useMediaStatus,
   useRemoteMediaClient,
-} from "react-native-google-cast";
+} from "@/packages/react-native-google-cast";
 import { logAndCaptureError } from "@/utils/log";
 import { HeaderButton, type HeaderButtonProps } from "./common/HeaderButton";
 import { HeaderIcon } from "./common/HeaderIcon";

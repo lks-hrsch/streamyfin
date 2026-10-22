@@ -6,13 +6,6 @@ import { useAtom, useAtomValue } from "jotai";
 import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Platform, TouchableOpacity, View } from "react-native";
-import CastContext, {
-  CastButton,
-  PlayServicesState,
-  useCastDevice,
-  useMediaStatus,
-  useRemoteMediaClient,
-} from "react-native-google-cast";
 import Animated, {
   Easing,
   interpolate,
@@ -27,6 +20,13 @@ import { RECEIVER_LOAD_TIMEOUT_MS } from "@/constants/Cast";
 import { useHaptic } from "@/hooks/useHaptic";
 import type { ThemeColors } from "@/hooks/useImageColorsReturn";
 import { usePlayMedia } from "@/hooks/usePlayMedia";
+import CastContext, {
+  CastButton,
+  PlayServicesState,
+  useCastDevice,
+  useMediaStatus,
+  useRemoteMediaClient,
+} from "@/packages/react-native-google-cast";
 import { getDownloadedItemById } from "@/providers/Downloads/database";
 import { useGlobalModal } from "@/providers/GlobalModalProvider";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";

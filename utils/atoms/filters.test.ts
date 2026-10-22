@@ -9,6 +9,7 @@ import { storage } from "@/utils/mmkv";
 import {
   FilterByPreferenceAtom,
   getFilterByPreference,
+  officialRatingPreferenceAtom,
   SortByOption,
   sortOptions,
   sortOptionsFor,
@@ -202,9 +203,36 @@ describe("sort options", () => {
     },
   );
 
+  // The library page accepts a sortBy from its URL when it is a SortByOption
+  // value, so the enum holds only keys a sort list can offer: the music keys
+  // come with the music sort list.
+  test("has no music sort keys before a list offers them", () => {
+    expect(Object.values(SortByOption)).not.toContain("Album");
+    expect(Object.values(SortByOption)).not.toContain("AlbumArtist");
+    expect(Object.values(SortByOption)).not.toContain("Artist");
+  });
+
   test("hands back the same list on every call", () => {
     expect(sortOptionsFor("playlists")).toBe(sortOptionsFor("playlists"));
     expect(sortOptionsFor("tvshows")).toBe(sortOptionsFor("tvshows"));
     expect(sortOptionsFor("movies")).toBe(sortOptionsFor(undefined));
+  });
+});
+
+describe("the saved official ratings of a library", () => {
+  test("round-trip through storage under their own key", () => {
+    const writer = createStore();
+    writer.sub(officialRatingPreferenceAtom, () => undefined);
+    writer.set(officialRatingPreferenceAtom, { movies: ["PG-13", "R"] });
+
+    const reader = createStore();
+    reader.sub(officialRatingPreferenceAtom, () => undefined);
+
+    expect(reader.get(officialRatingPreferenceAtom)).toEqual({
+      movies: ["PG-13", "R"],
+    });
+    expect(storage.getString("officialRatingPreference")).toBe(
+      JSON.stringify({ movies: ["PG-13", "R"] }),
+    );
   });
 });

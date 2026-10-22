@@ -5,6 +5,7 @@ name: 🚀 Release
 # be approved independently in "Review pending deployments":
 #   1. iOS phone → TestFlight   [production-ios]   self-hosted Mac, fastlane
 #   2. tvOS      → TestFlight   [production-tvos]  self-hosted Mac, fastlane
+#   3. Mac       → TestFlight   [production-macos] self-hosted Mac, fastlane (Mac Catalyst)
 # Android is not migrated yet; it gets its own matrix entries and a
 # `platform :android` block in fastlane/Fastfile. See docs/ci.md.
 #
@@ -53,12 +54,20 @@ jobs:
             profile: production_tv
             runner: [self-hosted, macOS, ARM64, xcode-27.1]
             environment: production-tvos
+          - name: 🖥️ macOS
+            platform: ios
+            target: mac
+            profile: production
+            runner: [self-hosted, macOS, ARM64, xcode-27.1]
+            environment: production-macos
     env:
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
       DEVELOPER_DIR: /Applications/Xcode-27.1.app/Contents/Developer
       # utils/version.ts shows the plain store version only for a production profile.
       EXPO_PUBLIC_BUILD_PROFILE: ${{ matrix.profile }}
       EXPO_TV: ${{ matrix.target == 'tvos' && '1' || '0' }}
+      # app.config.ts adds the Mac Catalyst plugin at prebuild (bun run prebuild:mac).
+      STREAMYFIN_MAC_CATALYST: ${{ matrix.target == 'mac' && '1' || '0' }}
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
       FASTLANE_SKIP_UPDATE_CHECK: "1"
@@ -103,6 +112,16 @@ jobs:
           DIST_P12_B64: op://ci-streamyfin/apple-distribution/p12-base64
           DIST_P12_PW: op://ci-streamyfin/apple-distribution/credential
 
+      # The Mac's App Store export is a .pkg, signed with its own installer certificate.
+      - name: 🔐 Load Mac installer certificate from 1Password
+        id: op_mac
+        if: matrix.target == 'mac'
+        uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5.0.1
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          MAC_INSTALLER_P12_B64: op://ci-streamyfin/macos-distribution/p12-base64
+          MAC_INSTALLER_P12_PW: op://ci-streamyfin/macos-distribution/credential
+
       # bun, node, fastlane and cocoapods come from the flake's devShell, pinned
       # by flake.lock, the same toolchain as local development.
       - name: 📦 Install dependencies
@@ -116,6 +135,12 @@ jobs:
           ASC_ISSUER_ID: ${{ steps.op.outputs.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ steps.op.outputs.ASC_KEY_P8 }}
         run: nix develop --command fastlane ios build_number target:${{ matrix.target }}
+
+      # MPVKit's release has no Catalyst slice. This derives one from the iOS slice
+      # into node_modules/.cache, where the Mac prebuild points the pod.
+      - name: 🧬 Derive MPVKit's Mac Catalyst slice
+        if: matrix.target == 'mac'
+        run: nix develop --command bun scripts/ios/mpvkit-catalyst.ts
 
       - name: 🛠️ Generate native project
         run: nix develop --command bun x expo prebuild --platform ${{ matrix.platform }} --clean --no-install
@@ -133,26 +158,29 @@ jobs:
           ASC_KEY_P8: ${{ steps.op.outputs.ASC_KEY_P8 }}
           DIST_P12_B64: ${{ steps.op_apple.outputs.DIST_P12_B64 }}
           DIST_P12_PW: ${{ steps.op_apple.outputs.DIST_P12_PW }}
+          MAC_INSTALLER_P12_B64: ${{ steps.op_mac.outputs.MAC_INSTALLER_P12_B64 }}
+          MAC_INSTALLER_P12_PW: ${{ steps.op_mac.outputs.MAC_INSTALLER_P12_PW }}
         run: |
           KC_PW="$(openssl rand -hex 24)" nix develop --command \
             fastlane ${{ matrix.platform }} release target:${{ matrix.target }} dry_run:${{ env.DRY_RUN }}
 
-      # The lane deletes it too; this covers a cancelled or killed run, and points
-      # the default keychain back at login so it never names a deleted file.
+      # The lane deletes it too; this covers a cancelled or killed run. The default
+      # keychain is left alone: the runner user has no login keychain to point it
+      # at, and each lane sets its own default and restores the previous one.
       - name: 🧹 Remove temporary keychain
         if: always() && matrix.platform == 'ios'
-        run: |
-          security delete-keychain "ci-signing-${{ github.run_id }}-${{ matrix.target }}.keychain-db" 2>/dev/null || true
-          security default-keychain -s login.keychain-db
+        run: security delete-keychain "ci-signing-${{ github.run_id }}-${{ matrix.target }}.keychain-db" 2>/dev/null || true
 
-      # Also on failure: a signed .ipa whose TestFlight upload failed can be uploaded
-      # by hand instead of rebuilding.
+      # Also on failure: a signed .ipa (the Mac's .pkg) whose TestFlight upload failed
+      # can be uploaded by hand instead of rebuilding.
       - name: 📤 Upload package (${{ matrix.name }})
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: streamyfin-${{ matrix.target }}
-          path: build/${{ matrix.target }}/*.ipa
+          path: |
+            build/${{ matrix.target }}/*.ipa
+            build/${{ matrix.target }}/*.pkg
           if-no-files-found: ignore
           retention-days: 14
 

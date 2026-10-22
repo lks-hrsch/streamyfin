@@ -67,3 +67,25 @@ index dd4c3c883720d265126b9dd544c9389a3ed8cbdd..0d4c99fdfc6fc70b2d83980d6bcc9ab9
        return .search
      }
    }
+diff --git a/ios/TabItemEventModifier.swift b/ios/TabItemEventModifier.swift
+index 674e602d5b959b1c12362efdd3d7800e6917aa4f..f8c50e66d776bfab7c482f32ca82ce04ee833e37 100644
+--- a/ios/TabItemEventModifier.swift
++++ b/ios/TabItemEventModifier.swift
+@@ -65,6 +65,17 @@ private final class TabBarDelegate: NSObject, UITabBarControllerDelegate {
+     return isReselectingSameTab ? false : !defaultPrevented
+   }
+ 
++  #if targetEnvironment(macCatalyst)
++  // In the Mac idiom the tab bar is a toolbar control: selecting a tab there
++  // asks neither shouldSelect callback, and SwiftUI's selection binding stays
++  // put, so the only sign of it is didSelectTab. Without it JavaScript never
++  // learns the tab changed and lazily mounted tabs stay blank.
++  @available(iOS 18.0, *)
++  func tabBarController(_ tabBarController: UITabBarController, didSelectTab selectedTab: UITab, previousTab: UITab?) {
++    _ = onClick?(tabIndex(for: selectedTab, in: tabBarController), selectedTab.identifier)
++  }
++  #endif
++
+   @available(iOS 18.0, tvOS 18.0, visionOS 2.0, *)
+   private func tabIndex(for tab: UITab, in tabBarController: UITabBarController) -> Int? {
+     tabBarController.tabs.firstIndex {

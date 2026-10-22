@@ -95,6 +95,7 @@ TV platform:
 - `android-tv-modal-close-loses-focus` | a dismissed TV modal route leaves Android TV with nothing focused; the page must hand the focus back with requestTVFocus(). BlurView only tints there
 
 Build and tooling:
+- `mac-catalyst-build` | Mac app = iOS target on Catalyst (opt-in); derived MPVKit slice, Apple Silicon only, own sandbox entitlements, per-pod fixes and why
 - `eas-archive-drops-gitignored-tracked-files` | EAS uploads skip anything matching .gitignore even if tracked; re-include required assets, keep asset require() at module scope
 - `bun-test-discovery-leaks-fds` | bare `bun test` leaves ~14k fds open; child processes spawned from tests get dead stdio, so do the work in-process
 - `require-hooks-leak-across-jest-specs` | a require hook (tsx/cjs) registered from a spec stays on the Jest worker's Node loader and breaks later specs; map it to a stub
@@ -123,6 +124,11 @@ bun run prebuild:tv
 bun run ios:tv
 bun run android:tv
 
+# Mac (Mac Catalyst, Apple Silicon)
+bun run prebuild:mac
+bun run mac                  # Release build, opens the app; --debug loads JS from Metro
+bun run mac --archive        # Archive + App Store Connect export (--export-method, --upload)
+
 # Quality
 bun run typecheck            # TypeScript
 bun run check                # Biome, read only
@@ -138,7 +144,7 @@ bun run test                 # The full gate: typecheck, unit, lint, format, i18
 bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build errors
 
 # Apple release (fastlane, run by .github/workflows/release.yml, see docs/ci.md)
-nix develop --command fastlane ios release target:ios dry_run:true
+nix develop --command fastlane ios release target:ios dry_run:true   # target:ios|tvos|mac
 ```
 
 ## Stack
@@ -172,7 +178,7 @@ nix develop --command fastlane ios release target:ios dry_run:true
 | `patches/` | Patch package overrides |
 | `augmentations/` | Type augmentations |
 | `test-utils/` | Shared test doubles: Jellyfin API, MMKV, the file system, custom headers, React Native, Reanimated |
-| `tests/native/` | Standalone native geometry checks and subtitle playback fixtures |
+| `tests/native/` | Standalone native checks (subtitle geometry, app container paths), each run by its script in `scripts/ios/`, and subtitle playback fixtures |
 | `translations/` | i18n catalogues, `en.json` is the only source |
 | `scripts/` | Repo tooling run through bun |
 | `biome-plugins/` | Custom Biome (Grit) lint rules, wired up in `biome.json` |
@@ -282,8 +288,10 @@ import { apiAtom } from "@/utils/atoms/api";
 
 ## Platform notes
 
-- Platform checks: `Platform.isTV`, `Platform.OS === "android" | "ios"`.
+- Platform checks: `Platform.isTV`, `Platform.OS === "android" | "ios"`, and for the Mac
+  build `Platform.OS === "ios" && Platform.isMacCatalyst`.
 - TV builds use the `:tv` script suffix.
-- Some features are off on TV, notifications and Chromecast among them.
+- Some features are off on TV, notifications and Chromecast among them. On the Mac:
+  Chromecast, the camera (companion QR login) and Live Activities.
 - The rest of the TV rules, covering focus, modals, typography and lists, live in
   [docs/conventions/tv.md](docs/conventions/tv.md). Read it before touching TV code.

@@ -67,9 +67,13 @@ import {
 import { reportDataError } from "@/utils/reportDataError";
 
 const Notifications = !Platform.isTV ? require("expo-notifications") : null;
-const JellyfinCastStopReporter = Platform.isTV
-  ? null
-  : require("@/components/JellyfinCastStopReporter").JellyfinCastStopReporter;
+// Not where the Cast SDK is missing either (TV, the Mac): it subscribes to the
+// session manager on mount, which only exists with the native module.
+const JellyfinCastStopReporter =
+  Platform.isTV ||
+  !require("@/packages/react-native-google-cast").isCastAvailable
+    ? null
+    : require("@/components/JellyfinCastStopReporter").JellyfinCastStopReporter;
 
 import { getSessionApi } from "@jellyfin/sdk/lib/utils/api/session-api";
 import { getLocales } from "expo-localization";
