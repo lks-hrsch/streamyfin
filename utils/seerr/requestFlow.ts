@@ -78,16 +78,23 @@ export const sendSeerrRequest = async ({
 };
 
 /**
- * Whether a Seerr answer means the session is gone. Seerr answers 403 both
- * to a request without a session and to an action the user may not take,
- * such as a request past the quota: only a read refused tells the first, and
- * not the detail of another user's request.
+ * Whether a Seerr answer means the session is gone. A request that carries no
+ * session cookie at all is answered 401 ("cookie 'connect.sid' required"),
+ * except while signing in, where 401 is a wrong password or a Quick Connect
+ * not approved yet. Seerr answers 403 both to a session it no longer knows
+ * and to an action the user may not take, such as a request past the quota:
+ * only a read refused tells the first, and not the detail of another user's
+ * request.
  */
 export const endsSeerrSession = (
   status: number | undefined,
   method: string | undefined,
   path: string | undefined,
-): boolean =>
-  status === 403 &&
-  (method ?? "get").toLowerCase() === "get" &&
-  !/\/request\/\d+$/.test(path ?? "");
+): boolean => {
+  if (status === 401) return !(path ?? "").includes("/auth/");
+  return (
+    status === 403 &&
+    (method ?? "get").toLowerCase() === "get" &&
+    !/\/request\/\d+$/.test(path ?? "")
+  );
+};
