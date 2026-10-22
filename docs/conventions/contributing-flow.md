@@ -52,8 +52,11 @@ trusts it, so every sentence in it has to survive a look at the diff.
   or function where the fault was.
 - **Ticket**: `Fixes #123` when an issue exists. Search the tracker before deciding none
   does.
-- **Screenshots**: any UI change ships before and after images, for iOS and Android both.
-  A video is better than a screenshot for anything animated.
+- **Screenshots**: any UI change ships before and after images for every platform it
+  reaches (iOS, Android, TV, the Mac), side by side and captioned, because the maintainer
+  reviews from them rather than from a build. A video is better than a screenshot for
+  anything animated. What exactly, and how to capture and attach it, is in
+  [AGENTS.md](../../AGENTS.md).
 - **Checklist**: tick only what is true. "Verified that changes behave as expected for
   all platforms" left unticked on a PR that edits Swift and Kotlin tells the reviewer
   exactly where to look, which is the point.
