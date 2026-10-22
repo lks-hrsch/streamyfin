@@ -7,9 +7,11 @@
     "start": "expo start",
     "prebuild": "cross-env EXPO_TV=0 bun run clean",
     "prebuild:tv": "cross-env EXPO_TV=1 bun run clean",
+    "prebuild:mac": "bun scripts/ios/mpvkit-catalyst.ts && cross-env EXPO_TV=0 STREAMYFIN_MAC_CATALYST=1 bun run clean",
     "ios:install-metal-toolchain": "bash scripts/ios/install-metal-toolchain.sh",
     "ios": "cross-env EXPO_TV=0 expo run:ios",
     "ios:tv": "cross-env EXPO_TV=1 expo run:ios",
+    "mac": "bun scripts/ios/build-mac.ts",
     "android": "cross-env EXPO_TV=0 expo run:android",
     "android:tv": "cross-env EXPO_TV=1 expo run:android",
     "build:android:local": "cd android && cross-env NODE_ENV=production ./gradlew assembleRelease",
@@ -187,7 +189,8 @@
   "patchedDependencies": {
     "react-native-udp@4.1.7": "patches/react-native-udp@4.1.7.patch",
     "react-native-track-player@github:lovegaoshi/react-native-track-player#d2baf9a": "patches/react-native-track-player@4.1.1.patch",
-    "react-native-bottom-tabs@1.4.0": "patches/react-native-bottom-tabs@1.4.0.patch"
+    "react-native-bottom-tabs@1.4.0": "patches/react-native-bottom-tabs@1.4.0.patch",
+    "react-native-screens@4.26.2": "patches/react-native-screens@4.26.2.patch"
   },
   "jest": {
     "preset": "jest-expo",

@@ -33,6 +33,7 @@ import { useImageColorsReturn } from "@/hooks/useImageColorsReturn";
 import { useOrientation } from "@/hooks/useOrientation";
 import { useVersionItemState } from "@/hooks/useVersionItem";
 import * as ScreenOrientation from "@/packages/expo-screen-orientation";
+import { isCastAvailable } from "@/packages/react-native-google-cast";
 import { useDownload } from "@/providers/DownloadProvider";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import { useOfflineMode } from "@/providers/OfflineModeProvider";
@@ -50,7 +51,7 @@ import { ItemHeader } from "./ItemHeader";
 import { ItemTechnicalDetails } from "./ItemTechnicalDetails";
 import { PlayInRemoteSessionButton } from "./PlayInRemoteSession";
 
-const Chromecast = !Platform.isTV ? require("./Chromecast") : null;
+const Chromecast = isCastAvailable ? require("./Chromecast") : null;
 const ItemContentTV = Platform.isTV
   ? require("./ItemContent.tv").ItemContentTV
   : null;
@@ -178,7 +179,7 @@ const ItemContentMobile: React.FC<ItemContentProps> = ({
         headerRight: () =>
           item && (
             <HeaderButtonGroup>
-              <Chromecast.Chromecast />
+              {Chromecast && <Chromecast.Chromecast />}
               {/* A group plays from the server: a downloaded copy has
                   nothing to start one with. */}
               {item.Type !== "Program" && !isOffline && (

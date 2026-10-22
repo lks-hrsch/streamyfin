@@ -3,6 +3,7 @@
 import "tsx/cjs";
 import { execFileSync } from "node:child_process";
 import type { ConfigContext, ExpoConfig } from "expo/config";
+import { mpvkitCatalystPodDir } from "./plugins/mac-catalyst/mpvkitPodDir";
 
 // Build metadata, injected into `extra.build` and read at runtime via
 // expo-constants (see utils/version.ts). Sources in priority order:
@@ -46,33 +47,72 @@ const buildMeta = {
   builtAt: new Date().toISOString(),
 };
 
-export default ({ config }: ConfigContext): ExpoConfig => {
+export default ({ config, projectRoot }: ConfigContext): ExpoConfig => {
+  const isMacCatalyst = process.env.STREAMYFIN_MAC_CATALYST === "1";
+
   if (process.env.EXPO_TV !== "1") {
     config.plugins?.push("expo-background-task");
 
-    // Has iOS stop the receiver when casting is stopped, as Android does. Mods
-    // run in reverse order, so this edits the cast options the library's
-    // plugin below writes.
-    config.plugins?.push("./plugins/withCastStopReceiverOnEnd.ts");
+    // The Cast SDK has no Mac Catalyst slice; the Mac build leaves it out
+    // entirely (see react-native.config.js and packages/react-native-google-cast).
+    if (!isMacCatalyst) {
+      // Has iOS stop the receiver when casting is stopped, as Android does. Mods
+      // run in reverse order, so this edits the cast options the library's
+      // plugin below writes.
+      config.plugins?.push("./plugins/withCastStopReceiverOnEnd.ts");
 
-    // F007D354 is Jellyfin's own Cast receiver: unlike the default Google
-    // receiver it authenticates against the server and reports playback, so a
-    // cast shows up in the dashboard and in the user's watch history.
-    config.plugins?.push([
-      "react-native-google-cast",
-      {
-        useDefaultExpandedMediaControls: true,
-        receiverAppId: "F007D354",
-      },
-    ]);
+      // F007D354 is Jellyfin's own Cast receiver: unlike the default Google
+      // receiver it authenticates against the server and reports playback, so a
+      // cast shows up in the dashboard and in the user's watch history.
+      config.plugins?.push([
+        "react-native-google-cast",
+        {
+          useDefaultExpandedMediaControls: true,
+          receiverAppId: "F007D354",
+        },
+      ]);
+    }
 
-    config.plugins?.push([
-      "expo-camera",
-      {
-        cameraPermission:
-          "Allow Streamyfin to access the camera to scan QR codes for TV login.",
-      },
-    ]);
+    // expo-camera does not build for Mac Catalyst (see react-native.config.js).
+    if (!isMacCatalyst) {
+      config.plugins?.push([
+        "expo-camera",
+        {
+          cameraPermission:
+            "Allow Streamyfin to access the camera to scan QR codes for TV login.",
+        },
+      ]);
+    }
+  }
+
+  if (isMacCatalyst) {
+    // MPVKit's release has no Catalyst slice; `bun run prebuild:mac` derives
+    // one locally first (scripts/ios/mpvkit-catalyst.ts) and the pod is taken
+    // from there instead of the release URL.
+    for (const plugin of config.plugins ?? []) {
+      if (
+        Array.isArray(plugin) &&
+        plugin[0] === "./plugins/withGitPod.ts" &&
+        plugin[1]?.podName === "MPVKit"
+      ) {
+        plugin[1] = {
+          ...plugin[1],
+          path: mpvkitCatalystPodDir(projectRoot, plugin[1].podspecUrl),
+        };
+      }
+      // Expo's precompiled module xcframeworks carry no Catalyst slice.
+      if (Array.isArray(plugin) && plugin[0] === "expo-build-properties") {
+        plugin[1] = {
+          ...plugin[1],
+          ios: { ...plugin[1]?.ios, usePrecompiledModules: false },
+        };
+      }
+    }
+    // First in the list so its mods run last (Expo runs a mod type's plugins
+    // in reverse order): the Live Activity widget extension and the app's
+    // entitlements have to exist before it filters the one to iOS and derives
+    // the Mac's entitlements from the other.
+    config.plugins?.unshift("./plugins/withMacCatalyst.ts");
   }
 
   // Sentry source-map/dSYM upload needs SENTRY_AUTH_TOKEN; without it the

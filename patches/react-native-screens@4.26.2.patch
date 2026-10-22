@@ -1,0 +1,33 @@
+diff --git a/ios/RNSScreen.mm b/ios/RNSScreen.mm
+index 9b66012..a430b02 100644
+--- a/ios/RNSScreen.mm
++++ b/ios/RNSScreen.mm
+@@ -32,6 +32,13 @@
+ #import "RNSDefines.h"
+ #import "UIView+RNSUtility.h"
+ 
++#if TARGET_OS_MACCATALYST
++// Implemented in RNSScreenStackHeaderConfig.mm, not exported by its header.
++@interface RNSScreenStackHeaderConfig (StreamyfinMacCatalyst)
++- (void)updateViewControllerIfNeeded;
++@end
++#endif
++
+ namespace react = facebook::react;
+ 
+ constexpr NSInteger SHEET_FIT_TO_CONTENTS = -1;
+@@ -1501,6 +1508,14 @@ Class<RCTComponentViewProtocol> RNSScreenCls(void)
+ - (void)viewDidAppear:(BOOL)animated
+ {
+   [super viewDidAppear:animated];
++#if TARGET_OS_MACCATALYST
++  // Mac Catalyst shows the navigation bar's items in the window toolbar. A
++  // menu opened in a modal presented over this screen leaves that toolbar
++  // without them once the modal is gone (back button and header buttons stay
++  // missing until a scroll makes UIKit rebuild it). Applying the header config
++  // again on appearing rebuilds it right away.
++  [[self.screenView findHeaderConfig] updateViewControllerIfNeeded];
++#endif
+   if (!_isSwiping || _shouldNotify) {
+     // we are going forward or dismissing without swipe
+     // or successfully swiped back
