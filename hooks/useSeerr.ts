@@ -10,6 +10,7 @@ import {
 } from "@/constants/Seerr";
 import { storage } from "@/utils/mmkv";
 import type { Results, User as SeerrUser } from "@/utils/seerr/types";
+import { store } from "@/utils/store";
 import "@/augmentations";
 import { t } from "i18next";
 import { useCallback, useMemo } from "react";
@@ -635,7 +636,7 @@ export class SeerrApi {
         // Only a read refused means the session is gone: a request past the
         // quota is refused with a 403 too, and signed the user out of Seerr.
         if (endsSeerrSession(status, error.config?.method, path)) {
-          clearSeerrStorageData();
+          forgetSeerrSession();
         }
         return Promise.reject(error);
       },
@@ -675,7 +676,19 @@ export class SeerrApi {
   }
 }
 
-const seerrUserAtom = atom(storage.get<SeerrUser>(SEERR_USER_STORAGE_KEY));
+export const seerrUserAtom = atom(
+  storage.get<SeerrUser>(SEERR_USER_STORAGE_KEY),
+);
+
+/**
+ * Forgets a session Seerr no longer has, in storage and in the user the app
+ * holds: with that user still set the client stayed up and SeerrAutoLogin saw
+ * nothing to do, so every page kept failing until the next launch.
+ */
+function forgetSeerrSession() {
+  clearSeerrStorageData();
+  store.set(seerrUserAtom, undefined);
+}
 
 export const useSeerr = () => {
   const { settings, updateSettings } = useSettings();

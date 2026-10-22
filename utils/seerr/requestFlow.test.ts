@@ -184,8 +184,30 @@ describe("endsSeerrSession", () => {
     expect(endsSeerrSession(403, "get", "/api/v1/request/42")).toBe(false);
   });
 
+  // Seerr answers 401 ("cookie 'connect.sid' required") to a request that
+  // carries no session cookie at all, which left Discover and search empty
+  // for good while the stored Seerr user kept the app "signed in".
+  test("ends it on a request sent without a session", () => {
+    expect(endsSeerrSession(401, "get", "/api/v1/settings/discover")).toBe(
+      true,
+    );
+    expect(endsSeerrSession(401, "get", "/api/v1/search")).toBe(true);
+    expect(endsSeerrSession(401, "post", "/api/v1/request")).toBe(true);
+  });
+
+  // A wrong password, or Quick Connect not approved yet.
+  test("keeps it when signing in is refused", () => {
+    expect(endsSeerrSession(401, "post", "/api/v1/auth/jellyfin")).toBe(false);
+    expect(
+      endsSeerrSession(
+        401,
+        "post",
+        "/api/v1/auth/jellyfin/quickconnect/authenticate",
+      ),
+    ).toBe(false);
+  });
+
   test("keeps it for any other answer", () => {
-    expect(endsSeerrSession(401, "get", "/api/v1/discover/movies")).toBe(false);
     expect(endsSeerrSession(500, "get", "/api/v1/discover/movies")).toBe(false);
     expect(endsSeerrSession(undefined, "get", "/api/v1/status")).toBe(false);
   });
