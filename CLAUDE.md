@@ -144,7 +144,7 @@ bun run test                 # The full gate: typecheck, unit, lint, format, i18
 bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build errors
 
 # Apple release (fastlane, run by .github/workflows/release.yml, see docs/ci.md)
-nix develop --command fastlane ios release target:ios dry_run:true
+nix develop --command fastlane ios release target:ios dry_run:true   # target:ios|tvos|mac
 ```
 
 ## Stack
