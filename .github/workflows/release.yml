@@ -119,8 +119,8 @@ jobs:
         uses: 1password/load-secrets-action@70062d7a876d3eb6334754fa26efd2fbd90c32f2 # v5.0.1
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          MAC_INSTALLER_P12_B64: op://ci-streamyfin/mac-installer-distribution/p12-base64
-          MAC_INSTALLER_P12_PW: op://ci-streamyfin/mac-installer-distribution/credential
+          MAC_INSTALLER_P12_B64: op://ci-streamyfin/macos-distribution/p12-base64
+          MAC_INSTALLER_P12_PW: op://ci-streamyfin/macos-distribution/credential
 
       # bun, node, fastlane and cocoapods come from the flake's devShell, pinned
       # by flake.lock, the same toolchain as local development.

@@ -37,9 +37,10 @@ The `mac` target is the iOS app built for Mac Catalyst, with the same bundle id 
 - The lane puts `/usr/sbin` first in `PATH` for this target. `nix develop` puts GNU coreutils
   first, and their `chown` fails the archive's `SetOwnerAndGroup` step.
 
-Apple-side setup, once: Mac Catalyst enabled on the App ID in the Developer portal, the macOS
-platform added to the app in App Store Connect, and a Mac Installer Distribution certificate
-whose `.p12` goes to 1Password (see Secrets).
+Apple-side setup, once: the macOS platform added to the app in App Store Connect, and a Mac
+Installer Distribution certificate whose `.p12` goes to 1Password (see Secrets). Leave the
+App ID's "Mac Catalyst" capability off: it only links an older, separate `maccatalyst.` App
+ID, and the Mac app here shares the iOS one.
 
 ## Runner
 
@@ -58,7 +59,7 @@ codesign fails with `errSecInternalComponent`.
 | GitHub secret | `OP_SERVICE_ACCOUNT_TOKEN` | Read-only service account for vault `ci-streamyfin` |
 | 1Password `asc-api-key` | `key-id`, `issuer-id`, `credential` | App Store Connect API key; `credential` is the `.p8` text or its base64 |
 | 1Password `apple-distribution` | `p12-base64`, `credential` | Apple Distribution `.p12` in base64, and its password |
-| 1Password `mac-installer-distribution` | `p12-base64`, `credential` | Mac Installer Distribution `.p12` in base64, and its password; only the Mac job loads it |
+| 1Password `macos-distribution` | `p12-base64`, `credential` | Mac Installer Distribution `.p12` in base64, and its password; only the Mac job loads it |
 
 The team and bundle id are read from `app.json` (`ios.appleTeamId`, `ios.bundleIdentifier`).
 Provisioning profiles are not stored: every run fetches or creates them with the API key.
@@ -82,8 +83,8 @@ nix develop --command fastlane ios release target:ios dry_run:true
 Use `EXPO_TV=1` and `target:tvos` for tvOS. For the Mac:
 
 ```bash
-export MAC_INSTALLER_P12_B64="$(op read op://ci-streamyfin/mac-installer-distribution/p12-base64)"
-export MAC_INSTALLER_P12_PW="$(op read op://ci-streamyfin/mac-installer-distribution/credential)"
+export MAC_INSTALLER_P12_B64="$(op read op://ci-streamyfin/macos-distribution/p12-base64)"
+export MAC_INSTALLER_P12_PW="$(op read op://ci-streamyfin/macos-distribution/credential)"
 nix develop --command fastlane ios build_number target:mac   # then export IOS_BUILD_NUMBER
 nix develop --command bun scripts/ios/mpvkit-catalyst.ts
 EXPO_TV=0 STREAMYFIN_MAC_CATALYST=1 nix develop --command bun x expo prebuild --platform ios --clean --no-install
