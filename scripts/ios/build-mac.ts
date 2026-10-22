@@ -10,22 +10,30 @@
  *   bun run mac --archive --upload  # export straight to App Store Connect
  *
  * Signing uses the team from app.json with automatic provisioning, so Xcode
- * must be signed in to that team's account. The App Store Connect export needs
- * that team's distribution certificates; `--export-method development` checks
- * the archive path without them.
+ * must be signed in to that team's account; the build registers this Mac with
+ * the team if it is not yet. The App Store Connect export needs that team's
+ * distribution certificates; `--export-method development` checks the archive
+ * path without them.
+ *
+ * Build, archive and export land in
+ * ~/Library/Developer/Xcode/DerivedData/streamyfin-mac, outside the checkout.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import plist from "@expo/plist";
+import {
+  macBuildArgs,
+  macDerivedDataPath,
+  macWorkspaceArgs,
+} from "./macXcodebuild";
 
 const repoRoot = resolve(import.meta.dir, "../..");
 const argv = process.argv.slice(2);
 const args = new Set(argv);
 const configuration = args.has("--debug") ? "Debug" : "Release";
-const derivedDataPath = join(repoRoot, "ios/build/mac");
-const workspace = ["-workspace", "ios/Streamyfin.xcworkspace"];
-const scheme = ["-scheme", "Streamyfin"];
+const derivedDataPath = macDerivedDataPath(homedir());
 
 const project = readFileSync(
   join(repoRoot, "ios/Streamyfin.xcodeproj/project.pbxproj"),
@@ -43,22 +51,10 @@ if (args.has("--archive")) {
   process.exit(0);
 }
 
-execFileSync(
-  "xcodebuild",
-  [
-    ...workspace,
-    ...scheme,
-    "-configuration",
-    configuration,
-    "-destination",
-    "platform=macOS,variant=Mac Catalyst,arch=arm64",
-    "-derivedDataPath",
-    derivedDataPath,
-    "-allowProvisioningUpdates",
-    "build",
-  ],
-  { cwd: repoRoot, stdio: "inherit" },
-);
+execFileSync("xcodebuild", macBuildArgs(configuration, derivedDataPath), {
+  cwd: repoRoot,
+  stdio: "inherit",
+});
 
 const app = join(
   derivedDataPath,
@@ -89,8 +85,7 @@ function archive() {
   execFileSync(
     "xcodebuild",
     [
-      ...workspace,
-      ...scheme,
+      ...macWorkspaceArgs,
       "-configuration",
       "Release",
       "-destination",

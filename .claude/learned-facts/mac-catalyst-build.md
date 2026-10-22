@@ -58,6 +58,15 @@ first; they are not cosmetic:
   `ReactCodegen.framework` with "cannot dereference", so the archive fails on
   `SetOwnerAndGroup`. BSD chown does not; run it as
   `PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" bun run mac --archive`.
+- **Build outside the checkout.** `bun run mac` builds, archives and exports into
+  `~/Library/Developer/Xcode/DerivedData/streamyfin-mac`, not `ios/build`. With the checkout
+  in `~/Documents` (iCloud Desktop & Documents), the bundle's files pick up extended
+  attributes and codesign fails with "resource fork, Finder information, or similar detritus
+  not allowed".
+- **Development signing registers the Mac.** A development profile only covers Macs in the
+  team's device list, so the build passes `-allowProvisioningDeviceRegistration` (it only
+  takes effect with `-allowProvisioningUpdates`); without it a Mac the team has not seen
+  fails with "Device ... isn't registered".
 - **SwiftUI menus keep only text from their label on the Mac.** @expo/ui's `Menu` with a
   React Native view as label draws as a bordered pull-down button with nothing in it.
   `PlatformDropdown` gives it `menuStyle("button")`, `buttonStyle("plain")` and
