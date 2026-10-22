@@ -1,0 +1,42 @@
+name: streamyfin-test-server
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:12.2.20261005-225228
+    container_name: streamyfin-test-jellyfin
+    volumes:
+      - ./.state/jellyfin-config:/config
+      - ./.state/jellyfin-cache:/cache
+      - ./.state/media:/media
+    restart: "no"
+
+  # The app talks to Jellyfin through this stand-in for the Streamyfin plugin,
+  # which serves the plugin's /Streamyfin/config (the Seerr address) and passes
+  # everything else on, websocket included.
+  plugin:
+    image: oven/bun:1.4.2-alpine
+    container_name: streamyfin-test-plugin
+    command: ["bun", "/app/plugin.ts"]
+    environment:
+      UPSTREAM: http://jellyfin:8096
+      SEERR_PUBLIC_URL: "http://${TEST_SERVER_HOST:-127.0.0.1}:${TEST_SEERR_PORT:-15155}"
+    volumes:
+      - ./plugin.ts:/app/plugin.ts:ro
+    ports:
+      - "${TEST_SERVER_BIND:-127.0.0.1}:${TEST_SERVER_PORT:-18196}:8096"
+    depends_on:
+      - jellyfin
+    restart: "no"
+
+  seerr:
+    image: ghcr.io/seerr-team/seerr:v3.5.0
+    container_name: streamyfin-test-seerr
+    environment:
+      LOG_LEVEL: info
+      TZ: UTC
+    volumes:
+      - ./.state/seerr-config:/app/config
+    ports:
+      - "${TEST_SERVER_BIND:-127.0.0.1}:${TEST_SEERR_PORT:-15155}:5055"
+    depends_on:
+      - jellyfin
+    restart: "no"
