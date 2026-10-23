@@ -557,12 +557,24 @@ export class SeerrApi {
     );
   }
 
-  async submitIssue(mediaId: number, issueType: IssueType, message: string) {
+  async submitIssue(
+    mediaId: number,
+    issueType: IssueType,
+    message: string,
+    problem?: { season?: number; episode?: number },
+  ) {
     return this.axios
       ?.post<Issue>(Endpoints.API_V1 + Endpoints.ISSUE, {
         mediaId,
         issueType,
         message,
+        // Seerr stores and shows the affected season and episode, and its own
+        // web app sends them, though its OpenAPI body declares neither. Left
+        // out when absent, so a movie or a whole series posts as before.
+        ...(problem?.season !== undefined && { problemSeason: problem.season }),
+        ...(problem?.episode !== undefined && {
+          problemEpisode: problem.episode,
+        }),
       })
       .then((response) => {
         const issue = response.data;

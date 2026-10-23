@@ -1,11 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import {
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-  BottomSheetModal,
-  BottomSheetTextInput,
-  BottomSheetView,
-} from "@gorhom/bottom-sheet";
 import type { BottomSheetModalMethods } from "@gorhom/bottom-sheet/lib/typescript/types";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useNavigation } from "expo-router";
@@ -21,17 +14,20 @@ import { Text } from "@/components/common/Text";
 import { GenreTags } from "@/components/GenreTags";
 import { OverviewText } from "@/components/OverviewText";
 import { ParallaxScrollView } from "@/components/ParallaxPage";
-import { PlatformDropdown } from "@/components/PlatformDropdown";
 import { SeerrRatings } from "@/components/Ratings";
 import { AwaitTitleButton } from "@/components/seerr/AwaitTitleButton";
 import Cast from "@/components/seerr/Cast";
 import DetailFacts from "@/components/seerr/DetailFacts";
 import RequestModal from "@/components/seerr/RequestModal";
+import {
+  SeerrIssueSheet,
+  type SeerrIssueSheetRef,
+} from "@/components/seerr/SeerrIssueSheet";
 import { SeerrRequestIcon } from "@/components/seerr/SeerrRequestIcon";
 import { TVSeerrPage } from "@/components/seerr/tv";
 import SeerrSeasons from "@/components/series/SeerrSeasons";
 import { ItemActions } from "@/components/series/SeriesActions";
-import { SeerrIssueColors, SheetColors } from "@/constants/Colors";
+import { SeerrIssueColors } from "@/constants/Colors";
 import {
   BACKGROUND_IMAGE_TRANSITION_DURATION,
   POSTER_ASPECT_RATIO,
@@ -40,8 +36,8 @@ import useRouter from "@/hooks/useAppRouter";
 import { useDismissKeyboardOnLeave } from "@/hooks/useDismissKeyboardOnLeave";
 import { useSeerr } from "@/hooks/useSeerr";
 import { useSeerrRequestOffer } from "@/hooks/useSeerrRequestOffer";
-import { writeErrorLog } from "@/utils/log";
 import { ANIME_KEYWORD_ID } from "@/utils/seerr/data";
+import { canCreateIssues } from "@/utils/seerr/libraryIssue";
 import { hasPermission, Permission } from "@/utils/seerr/permissions";
 import type {
   MediaRequest,
@@ -51,13 +47,7 @@ import type {
   TvDetails,
   TvResult,
 } from "@/utils/seerr/types";
-import {
-  type IssueType,
-  IssueTypeName,
-  MediaRequestStatus,
-  MediaType,
-} from "@/utils/seerr/types";
-import { createSubmission } from "@/utils/submission";
+import { MediaRequestStatus, MediaType } from "@/utils/seerr/types";
 
 // Mobile page component
 const MobilePage: React.FC = () => {
@@ -79,12 +69,9 @@ const MobilePage: React.FC = () => {
   const navigation = useNavigation();
   const { seerrApi, seerrUser, requestMedia, refreshAfterRequest } = useSeerr();
 
-  const [issueType, setIssueType] = useState<IssueType>();
-  const [issueMessage, setIssueMessage] = useState<string>();
   const [requestBody, _setRequestBody] = useState<MediaRequestBody>();
-  const [issueTypeDropdownOpen, setIssueTypeDropdownOpen] = useState(false);
   const advancedReqModalRef = useRef<BottomSheetModalMethods>(null);
-  const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+  const issueSheetRef = useRef<SeerrIssueSheetRef>(null);
 
   const {
     data: details,
@@ -150,52 +137,6 @@ const MobilePage: React.FC = () => {
     }
   }, [seerrApi, pendingRequest, refetch, refreshAfterRequest, t]);
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-      />
-    ),
-    [],
-  );
-
-  const issueSubmission = useRef(createSubmission()).current;
-  const submitIssue = useCallback(() => {
-    // A title Seerr has never seen carries no mediaInfo, so there is nothing
-    // to file an issue against.
-    const mediaId = details?.mediaInfo?.id;
-    if (
-      !seerrApi ||
-      !result.id ||
-      !issueType ||
-      !issueMessage ||
-      mediaId === undefined
-    )
-      return;
-    // A second tap while the first is on its way would file the issue twice.
-    if (!issueSubmission.start()) return;
-    seerrApi
-      .submitIssue(mediaId, Number(issueType), issueMessage)
-      .then(() => {
-        setIssueType(undefined);
-        setIssueMessage(undefined);
-        bottomSheetModalRef?.current?.close();
-      })
-      // The response interceptor already logs and reports the failure with
-      // its route; an uncaught rejection here would re-report it as a
-      // stackless unhandledrejection event.
-      .catch((error) => {
-        writeErrorLog("Seerr submitIssue failed", String(error));
-      })
-      .finally(() => issueSubmission.finish());
-  }, [seerrApi, details, result, issueType, issueMessage, issueSubmission]);
-
-  const handleIssueModalDismiss = useCallback(() => {
-    setIssueTypeDropdownOpen(false);
-  }, []);
-
   const setRequestBody = useCallback(
     (body: MediaRequestBody) => {
       _setRequestBody(body);
@@ -238,24 +179,6 @@ const MobilePage: React.FC = () => {
     [details],
   );
 
-  const issueTypeOptionGroups = useMemo(
-    () => [
-      {
-        title: t("seerr.types"),
-        options: Object.entries(IssueTypeName)
-          .reverse()
-          .map(([key, value]) => ({
-            type: "radio" as const,
-            label: value,
-            value: key,
-            selected: key === String(issueType),
-            onPress: () => setIssueType(key as unknown as IssueType),
-          })),
-      },
-    ],
-    [issueType, t],
-  );
-
   useEffect(() => {
     if (details) {
       navigation.setOptions({
@@ -267,6 +190,10 @@ const MobilePage: React.FC = () => {
   // Set once the library has the title. Read here rather than in the press
   // handler below, which would lose the check the button was drawn behind.
   const jellyfinMediaId = details?.mediaInfo?.jellyfinMediaId;
+  // Only for those Seerr takes an issue from: anyone else would fill in the
+  // sheet to be refused.
+  const offersIssueReport =
+    !!jellyfinMediaId && canCreateIssues(seerrUser?.permissions);
 
   return (
     <View
@@ -407,11 +334,11 @@ const MobilePage: React.FC = () => {
                         </Text>
                       </Button>
                     )}
-                    {jellyfinMediaId && !Platform.isTV && (
+                    {offersIssueReport && !Platform.isTV && (
                       <TouchableOpacity
                         accessibilityRole='button'
                         accessibilityLabel={t("seerr.report_issue_button")}
-                        onPress={() => bottomSheetModalRef?.current?.present()}
+                        onPress={() => issueSheetRef.current?.present()}
                         style={{
                           aspectRatio: 1,
                           alignSelf: "stretch",
@@ -544,69 +471,11 @@ const MobilePage: React.FC = () => {
       />
       {!Platform.isTV && (
         // This is till it's fixed because the menu isn't selectable on TV
-        <BottomSheetModal
-          ref={bottomSheetModalRef}
-          enableDynamicSizing
-          handleIndicatorStyle={{
-            backgroundColor: "white",
-          }}
-          backgroundStyle={{
-            backgroundColor: SheetColors.background,
-          }}
-          backdropComponent={renderBackdrop}
-          stackBehavior='push'
-          onDismiss={handleIssueModalDismiss}
-        >
-          <BottomSheetView>
-            <View className='flex flex-col px-4 pb-8 pt-2' style={{ gap: 16 }}>
-              <View>
-                <Text className='font-bold text-2xl text-neutral-100'>
-                  {t("seerr.whats_wrong")}
-                </Text>
-              </View>
-              <View className='flex flex-col items-start' style={{ gap: 8 }}>
-                <View className='flex flex-col w-full'>
-                  <Text className='opacity-50 mb-1 text-xs'>
-                    {t("seerr.issue_type")}
-                  </Text>
-                  <PlatformDropdown
-                    groups={issueTypeOptionGroups}
-                    trigger={
-                      <View className='bg-neutral-900 h-10 rounded-xl border-neutral-800 border px-3 py-2 flex flex-row items-center justify-between'>
-                        <Text numberOfLines={1}>
-                          {issueType
-                            ? IssueTypeName[issueType]
-                            : t("seerr.select_an_issue")}
-                        </Text>
-                      </View>
-                    }
-                    title={t("seerr.types")}
-                    open={issueTypeDropdownOpen}
-                    onOpenChange={setIssueTypeDropdownOpen}
-                  />
-                </View>
-
-                <View className='p-4 border border-neutral-800 rounded-xl bg-neutral-900 w-full'>
-                  <BottomSheetTextInput
-                    multiline
-                    maxLength={254}
-                    style={{ color: "white" }}
-                    clearButtonMode='always'
-                    placeholder={t("seerr.issue_details")}
-                    placeholderTextColor='#9CA3AF'
-                    // Issue with multiline + Textinput inside a portal
-                    // https://github.com/callstack/react-native-paper/issues/1668
-                    defaultValue={issueMessage}
-                    onChangeText={setIssueMessage}
-                  />
-                </View>
-              </View>
-              <Button className='mt-auto' onPress={submitIssue} color='purple'>
-                {t("seerr.submit_button")}
-              </Button>
-            </View>
-          </BottomSheetView>
-        </BottomSheetModal>
+        <SeerrIssueSheet
+          ref={issueSheetRef}
+          mediaId={details?.mediaInfo?.id}
+          ready={!!result.id}
+        />
       )}
     </View>
   );
