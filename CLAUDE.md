@@ -25,6 +25,11 @@ adds something worth knowing, update it in the same PR. The triggers:
 both directions, so drift in those fails the suite instead of surviving for months.
 Everything else depends on you noticing.
 
+## Pull requests
+
+The maintainer reviews every PR by hand, from its description and before/after images.
+[AGENTS.md](AGENTS.md) says what a PR needs for that; read it before opening or updating one.
+
 ## Conventions
 
 Read the relevant one before writing code in that area.

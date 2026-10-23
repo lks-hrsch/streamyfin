@@ -5,6 +5,7 @@ import { useSeerr } from "@/hooks/useSeerr";
 import { useSeerrPublicSettings } from "@/hooks/useSeerrPublicSettings";
 import { hasPermission, Permission } from "@/utils/seerr/permissions";
 import {
+  type HeldSeasons,
   roomForAll,
   roomForOneMore,
   seasonRows,
@@ -27,6 +28,7 @@ export const useSeerrSeasonRequest = ({
   enabled,
   opened,
   quotaUserId,
+  held,
 }: {
   details?: TvDetails;
   /** False for a film: nothing to choose. */
@@ -38,6 +40,8 @@ export const useSeerrSeasonRequest = ({
   opened?: { seasons?: number[] | "all" };
   /** Whose quota counts: the user's own, or the one picked in Request as. */
   quotaUserId?: number;
+  /** Seasons the library holds in full: available, so not to be chosen. */
+  held?: HeldSeasons;
 }) => {
   const { t } = useTranslation();
   const { seerrApi, seerrUser } = useSeerr();
@@ -49,12 +53,13 @@ export const useSeerrSeasonRequest = ({
   const partial = publicSettings?.partialRequestsEnabled !== false;
 
   const rows = useMemo(
-    () => (enabled && details ? seasonRows(details, { specials }) : []),
-    [enabled, details, specials],
+    () => (enabled && details ? seasonRows(details, { specials, held }) : []),
+    [enabled, details, specials, held],
   );
   const unrequested = useMemo(
-    () => (enabled && details ? unrequestedSeasons(details, { specials }) : []),
-    [enabled, details, specials],
+    () =>
+      enabled && details ? unrequestedSeasons(details, { specials, held }) : [],
+    [enabled, details, specials, held],
   );
   const [selected, setSelected] = useState<number[]>([]);
 

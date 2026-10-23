@@ -13,6 +13,7 @@
       "!.expo",
       "!e2e/syncplay/.state",
       "!e2e/syncplay/artifacts",
+      "!e2e/test-server/.state",
       "!docs/jellyfin-openapi-stable.json",
       "!**/*.svg",
       "!.reassure"

@@ -1108,6 +1108,10 @@
       "blocklisted": "Blocklisted",
       "deleted": "Deleted"
     },
+    "series_page": {
+      "missing_seasons": "Missing seasons",
+      "request_seasons": "Request seasons"
+    },
     "request_card_seasons_one": "Season",
     "request_card_seasons_other": "Seasons",
     "request_card_seasons": "Seasons",
