@@ -22,6 +22,8 @@ import { useTranslation } from "react-i18next";
 import { FlatList, Platform, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCardGrid } from "@/components/cards/useCardGrid";
+import { MissingFromCollection } from "@/components/collections/MissingFromCollection";
+import { TVMissingFromCollection } from "@/components/collections/TVMissingFromCollection";
 import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
 import { FilterButton } from "@/components/filters/FilterButton";
@@ -681,6 +683,9 @@ const page: React.FC = () => {
           }}
           onEndReachedThreshold={0.5}
           ListHeaderComponent={ListHeaderComponent}
+          ListFooterComponent={
+            <MissingFromCollection collection={collection} />
+          }
           contentContainerStyle={{ paddingBottom: 24 }}
           ItemSeparatorComponent={() => (
             <View style={{ height: grid.rowGap }} />
@@ -781,6 +786,13 @@ const page: React.FC = () => {
           }
         }}
         onEndReachedThreshold={1}
+        ListFooterComponent={
+          <TVMissingFromCollection
+            collection={collection}
+            inset={TV_SCALE_PADDING}
+            gap={TV_ITEM_GAP}
+          />
+        }
         contentContainerStyle={{
           paddingBottom: 24,
           paddingLeft: TV_SCALE_PADDING,

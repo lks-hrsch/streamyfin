@@ -24,5 +24,9 @@ export const useSeerrPerson = (personId: string | undefined) => {
     [data?.combinedCredits],
   );
 
-  return { details: data?.details, roles };
+  return {
+    details: data?.details,
+    roles,
+    combinedCredits: data?.combinedCredits,
+  };
 };

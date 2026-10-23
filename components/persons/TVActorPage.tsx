@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
-import { getItemsApi } from "@jellyfin/sdk/lib/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSegments } from "expo-router";
@@ -26,15 +25,20 @@ import { Image, prefetchServerImage } from "@/components/common/ServerImage";
 import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
 import { Loader } from "@/components/Loader";
+import { usePersonFactLines } from "@/components/persons/usePersonFactLines";
 import { TVPosterCard } from "@/components/tv/TVPosterCard";
+import { TVSeerrPosterCard } from "@/components/tv/TVSeerrPosterCard";
+import { Colors } from "@/constants/Colors";
 import { useScaledTVPosterSizes } from "@/constants/TVPosterSizes";
 import { useScaledTVSizes } from "@/constants/TVSizes";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import useRouter from "@/hooks/useAppRouter";
+import { usePersonProfile } from "@/hooks/usePersonProfile";
 import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import { getBackdropUrl } from "@/utils/jellyfin/image/getBackdropUrl";
 import { getUserItemData } from "@/utils/jellyfin/user-library/getUserItemData";
+import type { FilmographyEntry } from "@/utils/seerr/personProfile";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -78,61 +82,26 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
     staleTime: 60,
   });
 
-  // Fetch movies
-  const { data: movies = [], isLoading: isLoadingMovies } = useQuery({
-    queryKey: ["actor", "movies", personId],
-    queryFn: async () => {
-      if (!api || !user?.Id) return [];
-
-      const response = await getItemsApi(api).getItems({
-        userId: user.Id,
-        personIds: [personId],
-        startIndex: 0,
-        limit: 20,
-        sortOrder: ["Descending", "Descending", "Ascending"],
-        includeItemTypes: ["Movie"],
-        recursive: true,
-        fields: ["ParentId", "PrimaryImageAspectRatio"],
-        sortBy: ["PremiereDate", "ProductionYear", "SortName"],
-        collapseBoxSetItems: false,
-      });
-
-      return response.data.Items || [];
-    },
-    enabled: !!personId && !!api && !!user?.Id,
-    staleTime: 60,
-  });
-
-  // Fetch series
-  const { data: series = [], isLoading: isLoadingSeries } = useQuery({
-    queryKey: ["actor", "series", personId],
-    queryFn: async () => {
-      if (!api || !user?.Id) return [];
-
-      const response = await getItemsApi(api).getItems({
-        userId: user.Id,
-        personIds: [personId],
-        startIndex: 0,
-        limit: 20,
-        sortOrder: ["Descending", "Descending", "Ascending"],
-        includeItemTypes: ["Series"],
-        recursive: true,
-        fields: ["ParentId", "PrimaryImageAspectRatio"],
-        sortBy: ["PremiereDate", "ProductionYear", "SortName"],
-        collapseBoxSetItems: false,
-      });
-
-      return response.data.Items || [];
-    },
-    enabled: !!personId && !!api && !!user?.Id,
-    staleTime: 60,
-  });
+  const {
+    facts,
+    filmography,
+    isLoading: isLoadingFilmography,
+  } = usePersonProfile(item);
+  const factLines = usePersonFactLines(facts);
+  const firstLibraryItem = useMemo(
+    () =>
+      [...filmography.movies, ...filmography.shows].find(
+        (entry) => entry.source === "library",
+      )?.item,
+    [filmography],
+  );
 
   // Get backdrop URL from the currently focused filmography item
   // Changes dynamically as user navigates through the list
   const backdropUrl = useMemo(() => {
-    // Use focused item if available, otherwise fall back to first movie or series
-    const itemForBackdrop = focusedItem ?? movies[0] ?? series[0];
+    // The focused library title, else the first one: a Seerr title has no
+    // Jellyfin backdrop.
+    const itemForBackdrop = focusedItem ?? firstLibraryItem;
     if (!itemForBackdrop) return null;
     return getBackdropUrl({
       api,
@@ -140,7 +109,7 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
       quality: 90,
       width: 1920,
     });
-  }, [api, focusedItem, movies, series]);
+  }, [api, focusedItem, firstLibraryItem]);
 
   // Crossfade animation for backdrop transitions
   // Use two alternating layers for smooth crossfade
@@ -228,9 +197,9 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
     [from, router],
   );
 
-  // List item layout
+  // Every card is the same width, library or Seerr.
   const getItemLayout = useCallback(
-    (_data: ArrayLike<BaseItemDto> | null | undefined, index: number) => ({
+    (_data: ArrayLike<FilmographyEntry> | null | undefined, index: number) => ({
       length: posterSizes.poster + ITEM_GAP,
       offset: (posterSizes.poster + ITEM_GAP) * index,
       index,
@@ -238,40 +207,51 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
     [],
   );
 
-  // Render movie filmography item
-  const renderMovieItem = useCallback(
-    ({ item: filmItem, index }: { item: BaseItemDto; index: number }) => (
-      <View style={{ marginRight: ITEM_GAP }}>
-        <TVPosterCard
-          item={filmItem}
-          orientation='vertical'
-          onPress={() => handleItemPress(filmItem)}
-          onLongPress={() => showItemActions(filmItem)}
-          onFocus={() => setFocusedItem(filmItem)}
-          hasTVPreferredFocus={index === 0}
-          width={posterSizes.poster}
-        />
-      </View>
-    ),
-    [handleItemPress, showItemActions, posterSizes.poster],
-  );
+  // The first card of the first row there is takes the first focus.
+  const firstRow = filmography.movies.length > 0 ? "movies" : "shows";
 
-  // Render series filmography item
-  const renderSeriesItem = useCallback(
-    ({ item: filmItem, index }: { item: BaseItemDto; index: number }) => (
-      <View style={{ marginRight: ITEM_GAP }}>
-        <TVPosterCard
-          item={filmItem}
-          orientation='vertical'
-          onPress={() => handleItemPress(filmItem)}
-          onLongPress={() => showItemActions(filmItem)}
-          onFocus={() => setFocusedItem(filmItem)}
-          hasTVPreferredFocus={movies.length === 0 && index === 0}
-          width={posterSizes.poster}
-        />
-      </View>
-    ),
-    [handleItemPress, showItemActions, posterSizes.poster, movies.length],
+  const renderEntry = useCallback(
+    (row: "movies" | "shows") =>
+      ({ item: entry, index }: { item: FilmographyEntry; index: number }) => (
+        <View style={{ marginRight: ITEM_GAP }}>
+          {entry.source === "library" ? (
+            <TVPosterCard
+              item={entry.item}
+              orientation='vertical'
+              onPress={() => handleItemPress(entry.item)}
+              onLongPress={() => showItemActions(entry.item)}
+              onFocus={() => setFocusedItem(entry.item)}
+              hasTVPreferredFocus={row === firstRow && index === 0}
+              width={posterSizes.poster}
+              overlay={<TVInLibraryBadge />}
+            />
+          ) : (
+            <TVSeerrPosterCard
+              item={entry.credit}
+              hasTVPreferredFocus={row === firstRow && index === 0}
+              onPress={() =>
+                router.push({
+                  pathname: "/(auth)/(tabs)/(search)/seerr/page",
+                  params: {
+                    id: String(entry.credit.id),
+                    mediaType: entry.credit.mediaType,
+                  },
+                })
+              }
+            />
+          )}
+        </View>
+      ),
+    [handleItemPress, showItemActions, posterSizes.poster, firstRow, router],
+  );
+  const renderMovieEntry = useMemo(() => renderEntry("movies"), [renderEntry]);
+  const renderShowEntry = useMemo(() => renderEntry("shows"), [renderEntry]);
+  const entryKey = useCallback(
+    (entry: FilmographyEntry) =>
+      entry.source === "library"
+        ? `library-${entry.item.Id}`
+        : `seerr-${entry.credit.mediaType}-${entry.credit.id}`,
+    [],
   );
 
   if (isLoadingActor) {
@@ -424,21 +404,22 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
               {item.Name}
             </Text>
 
-            {/* Production year / Birth year */}
-            {item.ProductionYear && (
+            {/* Known for, born, died: Jellyfin and Seerr together */}
+            {factLines.map((line, index) => (
               <Text
+                key={line}
                 style={{
                   fontSize: typography.callout,
                   color: "#9CA3AF",
-                  marginBottom: 16,
+                  marginBottom: index === factLines.length - 1 ? 16 : 4,
                 }}
               >
-                {item.ProductionYear}
+                {line}
               </Text>
-            )}
+            ))}
 
             {/* Biography */}
-            {item.Overview && (
+            {!!facts.biography && (
               <Text
                 style={{
                   fontSize: typography.body,
@@ -448,7 +429,7 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
                 }}
                 numberOfLines={4}
               >
-                {item.Overview}
+                {facts.biography}
               </Text>
             )}
           </View>
@@ -457,7 +438,7 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
         {/* Filmography sections */}
         <View style={{ flex: 1, overflow: "visible" }}>
           {/* Movies Section */}
-          {isLoadingMovies ? (
+          {isLoadingFilmography ? (
             <View
               style={{
                 height: 300,
@@ -468,7 +449,7 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
               <Loader />
             </View>
           ) : (
-            movies.length > 0 && (
+            filmography.movies.length > 0 && (
               <View style={{ marginBottom: 32 }}>
                 <Text
                   style={{
@@ -483,9 +464,9 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
                 </Text>
                 <FlatList
                   horizontal
-                  data={movies}
-                  keyExtractor={(filmItem) => filmItem.Id!}
-                  renderItem={renderMovieItem}
+                  data={filmography.movies}
+                  keyExtractor={entryKey}
+                  renderItem={renderMovieEntry}
                   showsHorizontalScrollIndicator={false}
                   initialNumToRender={6}
                   maxToRenderPerBatch={4}
@@ -503,7 +484,7 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
           )}
 
           {/* Series Section */}
-          {isLoadingSeries ? (
+          {isLoadingFilmography ? (
             <View
               style={{
                 height: 300,
@@ -514,7 +495,7 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
               <Loader />
             </View>
           ) : (
-            series.length > 0 && (
+            filmography.shows.length > 0 && (
               <View>
                 <Text
                   style={{
@@ -529,9 +510,9 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
                 </Text>
                 <FlatList
                   horizontal
-                  data={series}
-                  keyExtractor={(filmItem) => filmItem.Id!}
-                  renderItem={renderSeriesItem}
+                  data={filmography.shows}
+                  keyExtractor={entryKey}
+                  renderItem={renderShowEntry}
                   showsHorizontalScrollIndicator={false}
                   initialNumToRender={6}
                   maxToRenderPerBatch={4}
@@ -549,10 +530,9 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
           )}
 
           {/* Empty state - only show if both sections are empty and not loading */}
-          {!isLoadingMovies &&
-            !isLoadingSeries &&
-            movies.length === 0 &&
-            series.length === 0 && (
+          {!isLoadingFilmography &&
+            filmography.movies.length === 0 &&
+            filmography.shows.length === 0 && (
               <Text
                 style={{
                   color: "#737373",
@@ -565,6 +545,46 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
             )}
         </View>
       </ScrollView>
+    </View>
+  );
+};
+
+/** On a library title's poster: it is there to play. */
+const TVInLibraryBadge: React.FC = () => {
+  const { t } = useTranslation();
+  const typography = useScaledTVTypography();
+  return (
+    <View
+      style={{
+        position: "absolute",
+        left: 8,
+        top: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: "rgba(0,0,0,0.7)",
+      }}
+    >
+      <View
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          backgroundColor: Colors.primary,
+        }}
+      />
+      <Text
+        style={{
+          fontSize: typography.callout * 0.7,
+          fontWeight: "600",
+          color: "#FFFFFF",
+        }}
+      >
+        {t("person_profile.in_library")}
+      </Text>
     </View>
   );
 };

@@ -39,6 +39,7 @@ import { seerrQueryString } from "@/utils/seerr/search";
 import { rememberSeerrSession } from "@/utils/seerr/session";
 import { slidersOf } from "@/utils/seerr/sliders";
 import type {
+  CollectionDetails,
   CombinedCredit,
   DiscoverSlider,
   GenreSliderItem,
@@ -95,6 +96,7 @@ export enum Endpoints {
   MEDIA = "/media",
   PERSON = "/person",
   COMBINED_CREDITS = "/combined_credits",
+  COLLECTION = "/collection",
   MOVIE = "/movie",
   RATINGS = "/ratings",
   ISSUE = "/issue",
@@ -498,6 +500,15 @@ export class SeerrApi {
       .then((response) => {
         return response?.data;
       });
+  }
+
+  /** A TMDB collection's films, each with where the library stands on it. */
+  async collectionDetails(id: number): Promise<CollectionDetails> {
+    return this.axios
+      ?.get<CollectionDetails>(
+        `${Endpoints.API_V1}${Endpoints.COLLECTION}/${id}`,
+      )
+      .then(({ data }) => data);
   }
 
   async movieRatings(id: number) {
