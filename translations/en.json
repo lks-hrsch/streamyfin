@@ -1127,6 +1127,9 @@
     "studios": "Studios",
     "network": "Network",
     "currently_streaming_on": "Currently streaming on",
+    "library_search": {
+      "not_in_your_library": "Not in your library"
+    },
     "advanced": "Advanced",
     "request_as": "Request as",
     "tags": "Tags",
