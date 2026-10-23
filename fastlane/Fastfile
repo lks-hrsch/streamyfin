@@ -81,6 +81,22 @@ platform :ios do
     File.delete(path) if path && File.exist?(path)
   end
 
+  # The release runner's network drops App Store Connect requests mid-response
+  # ("SSL_read: unexpected eof while reading"). The calls wrapped in this are safe
+  # to repeat, so a dropped one is retried instead of failing the release.
+  def with_network_retry(attempts: 3)
+    tries = 0
+    begin
+      yield
+    rescue Faraday::ConnectionFailed, Faraday::SSLError, Faraday::TimeoutError, OpenSSL::SSL::SSLError => e
+      tries += 1
+      raise if tries >= attempts
+      UI.important("#{e.class}: #{e.message}. Retry #{tries} of #{attempts - 1} in 15 s")
+      sleep(15)
+      retry
+    end
+  end
+
   # fastlane ios build_number target:ios
   # Prints the next TestFlight build number and exports it as IOS_BUILD_NUMBER for
   # the steps after it (app.config.ts reads it before prebuild).
@@ -88,12 +104,14 @@ platform :ios do
     tc = TARGETS.fetch(opts[:target])
     # initial_build_number 0 makes a first upload 1; a failed lookup raises instead
     # of silently restarting the count.
-    latest = latest_testflight_build_number(
-      api_key: asc_key,
-      app_identifier: APP_BUNDLE_ID,
-      platform: tc[:asc],
-      initial_build_number: 0
-    )
+    latest = with_network_retry do
+      latest_testflight_build_number(
+        api_key: asc_key,
+        app_identifier: APP_BUNDLE_ID,
+        platform: tc[:asc],
+        initial_build_number: 0
+      )
+    end
     next_number = latest.to_i + 1
     UI.success("Next #{opts[:target]} build number: #{next_number}")
     if ENV["GITHUB_ENV"]
@@ -129,12 +147,15 @@ platform :ios do
 
       profiles = {}
       signable_targets(PROJECT, catalyst: tc[:catalyst]).each do |t|
-        get_provisioning_profile(
-          api_key: api_key,
-          app_identifier: t[:bundle_id],
-          platform: tc[:sigh],
-          output_path: File.join(ROOT, "build/profiles")
-        )
+        # A retry after a dropped create finds the profile the first try made.
+        with_network_retry do
+          get_provisioning_profile(
+            api_key: api_key,
+            app_identifier: t[:bundle_id],
+            platform: tc[:sigh],
+            output_path: File.join(ROOT, "build/profiles")
+          )
+        end
         profile_name = lane_context[SharedValues::SIGH_NAME]
         profiles[t[:bundle_id]] = profile_name
         update_code_signing_settings(

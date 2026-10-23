@@ -46,6 +46,21 @@ import { retagArchiveForCatalyst } from "./machORetag";
 const CATALYST_SLICE = "ios-arm64-maccatalyst";
 /** Bump when the recipe changes, so a cached pod from an older one is rebuilt. */
 const RECIPE = "2";
+/**
+ * The release runner's network stalls: one download sat for 14 minutes before
+ * curl gave up. A transfer under 10 kB/s for a minute is aborted and retried.
+ */
+const CURL_RETRY = [
+  "--retry",
+  "5",
+  "--retry-all-errors",
+  "--retry-delay",
+  "10",
+  "--speed-limit",
+  "10000",
+  "--speed-time",
+  "60",
+];
 
 /**
  * Stand-ins for the OpenGL ES API libmpv's iOS GL interop references. Every
@@ -125,11 +140,24 @@ const prepare = () => {
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
 
-  const podspec = execFileSync("curl", ["-fsSL", podspecUrl]).toString();
+  const podspec = execFileSync("curl", [
+    "-fsSL",
+    ...CURL_RETRY,
+    podspecUrl,
+  ]).toString();
   const zipUrl = podspec.match(/:http\s*=>\s*'([^']+)'/)?.[1];
   if (!zipUrl) throw new Error(`No :http source in ${podspecUrl}`);
 
-  run("curl", ["-fsSL", "-o", join(outDir, "MPVKit.zip"), zipUrl]);
+  // -C - resumes a retried transfer from what already arrived.
+  run("curl", [
+    "-fsSL",
+    ...CURL_RETRY,
+    "-C",
+    "-",
+    "-o",
+    join(outDir, "MPVKit.zip"),
+    zipUrl,
+  ]);
   run("unzip", ["-q", "MPVKit.zip"], outDir);
   rmSync(join(outDir, "MPVKit.zip"));
 
