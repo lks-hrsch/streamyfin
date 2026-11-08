@@ -18,7 +18,12 @@
  * edge read as a bug where a bare glyph does not.
  */
 
-import { Children, type PropsWithChildren } from "react";
+import {
+  Children,
+  createContext,
+  type PropsWithChildren,
+  useContext,
+} from "react";
 import {
   Platform,
   type StyleProp,
@@ -47,6 +52,17 @@ const HEADER_INSET = 8;
 
 /** UIKit's spacing between adjacent bar button items. */
 const HEADER_BUTTON_GAP = 16;
+
+/**
+ * Height of the pill the Mac toolbar draws around a header item. The Mac hosts
+ * header items in the window toolbar, which draws that pill at this fixed
+ * height whatever the item's own height, so a bare glyph came out as a
+ * standing capsule next to the round back button.
+ */
+const MAC_TOOLBAR_ITEM_HEIGHT = 36;
+
+/** Set inside a `HeaderButtonGroup` of two or more, which owns the spacing. */
+const InHeaderGroupContext = createContext(false);
 
 /** Grows the icon box to the 44pt minimum touch target from Apple's HIG. */
 const HEADER_HIT_SLOP = 10;
@@ -89,29 +105,45 @@ export const HeaderButton: React.FC<PropsWithChildren<HeaderButtonProps>> = ({
   variant = "icon",
   style,
   ...props
-}) => (
-  <Pressable
-    hitSlop={HEADER_HIT_SLOP}
-    style={[
-      {
-        height: HEADER_ICON_SIZE,
-        // Icons stay square; text buttons ("Save", "Log out") grow past it.
-        minWidth: HEADER_ICON_SIZE,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingHorizontal: variant === "text" ? HEADER_INSET : 0,
-        marginRight:
-          placement === "left" && Platform.OS === "android"
-            ? ANDROID_TITLE_GAP
-            : 0,
-      },
-      style,
-    ]}
-    {...props}
-  >
-    {children}
-  </Pressable>
-);
+}) => {
+  const inGroup = useContext(InHeaderGroupContext);
+  // On the Mac a lone glyph is padded to the toolbar pill's height, so the
+  // pill around it is round like the back button's.
+  const isMacLoneIcon =
+    Platform.OS === "ios" &&
+    Platform.isMacCatalyst &&
+    variant === "icon" &&
+    !inGroup;
+
+  return (
+    <Pressable
+      hitSlop={HEADER_HIT_SLOP}
+      style={[
+        {
+          height: HEADER_ICON_SIZE,
+          // Icons stay square; text buttons ("Save", "Log out") grow past it.
+          minWidth: HEADER_ICON_SIZE,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingHorizontal:
+            variant === "text"
+              ? HEADER_INSET
+              : isMacLoneIcon
+                ? (MAC_TOOLBAR_ITEM_HEIGHT - HEADER_ICON_SIZE) / 2
+                : 0,
+          marginRight:
+            placement === "left" && Platform.OS === "android"
+              ? ANDROID_TITLE_GAP
+              : 0,
+        },
+        style,
+      ]}
+      {...props}
+    >
+      {children}
+    </Pressable>
+  );
+};
 
 /**
  * Lays out header buttons in a row and owns all of their spacing: the gap
@@ -148,7 +180,9 @@ export const HeaderButtonGroup: React.FC<PropsWithChildren<ViewProps>> = ({
       ]}
       {...props}
     >
-      {children}
+      <InHeaderGroupContext.Provider value={!isAlone}>
+        {children}
+      </InHeaderGroupContext.Provider>
     </View>
   );
 };

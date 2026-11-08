@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Pressable as GesturePressable } from "react-native-gesture-handler";
 import { useHaptic } from "@/hooks/useHaptic";
 import { scaleSize } from "@/utils/scaleSize";
 import { Loader } from "./Loader";
@@ -69,6 +70,15 @@ const getColorClasses = (
     }
   }
 };
+
+// React Native's TouchableOpacity loses presses in the Mac build (Catalyst)
+// where it sits in a native header; Gesture Handler's Pressable gets them (see
+// .claude/learned-facts/macos-header-buttons-fix.md). Only the Mac takes it, so
+// iOS and Android keep their touch feedback as it was.
+const Touchable: typeof TouchableOpacity =
+  Platform.OS === "ios" && Platform.isMacCatalyst
+    ? (GesturePressable as unknown as typeof TouchableOpacity)
+    : TouchableOpacity;
 
 export interface ButtonProps
   extends React.ComponentProps<typeof TouchableOpacity> {
@@ -162,7 +172,9 @@ export const Button: React.FC<PropsWithChildren<ButtonProps>> = ({
       </Animated.View>
     </Pressable>
   ) : (
-    <TouchableOpacity
+    // className survives the swap on the Mac because NativeWind v2 rewrites it
+    // to style in Babel, independent of the component.
+    <Touchable
       className={`
         p-3 rounded-xl items-center justify-center
         ${(loading || disabled) && "opacity-50"}
@@ -210,6 +222,6 @@ export const Button: React.FC<PropsWithChildren<ButtonProps>> = ({
           {iconRight ?? (justify === "between" && <View className='w-4' />)}
         </View>
       )}
-    </TouchableOpacity>
+    </Touchable>
   );
 };

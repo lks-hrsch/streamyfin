@@ -49,6 +49,7 @@ export const NativeTabs = withLayoutContext<
 >(Navigator);
 
 const IS_ANDROID_TV = Platform.isTV && Platform.OS === "android";
+const IS_MAC_CATALYST = Platform.OS === "ios" && Platform.isMacCatalyst;
 
 function TVTabLayout() {
   const { settings } = useSettings();
@@ -185,7 +186,10 @@ export default function TabLayout() {
           })}
           name='(search)'
           options={{
-            role: "search",
+            // In the Mac idiom UIKit's search tab is not selectable like the
+            // others (a click only highlights it), so the Mac build keeps
+            // Search an ordinary tab.
+            role: IS_MAC_CATALYST ? undefined : "search",
             title: t("tabs.search"),
             tabBarIcon:
               Platform.OS === "android"

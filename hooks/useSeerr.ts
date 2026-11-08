@@ -31,7 +31,11 @@ import {
   yearOf,
 } from "@/utils/seerr/media";
 import { isSeerrQuery, touchedByRequest } from "@/utils/seerr/queries";
-import { endsSeerrSession, sendSeerrRequest } from "@/utils/seerr/requestFlow";
+import {
+  endsSeerrSession,
+  type NothingRequested,
+  sendSeerrRequest,
+} from "@/utils/seerr/requestFlow";
 import { seerrQueryString } from "@/utils/seerr/search";
 import { rememberSeerrSession } from "@/utils/seerr/session";
 import { genresOf, slidersOf } from "@/utils/seerr/sliders";
@@ -416,13 +420,18 @@ export class SeerrApi {
       .then(({ data }) => data);
   }
 
-  async request(request: MediaRequestBody): Promise<MediaRequest> {
+  async request(
+    request: MediaRequestBody,
+  ): Promise<MediaRequest | NothingRequested> {
     const body =
       this.apiKey && this.actAsUserId != null && request.userId == null
         ? { ...request, userId: this.actAsUserId }
         : request;
     return this.axios
-      ?.post<MediaRequest>(Endpoints.API_V1 + Endpoints.REQUEST, body)
+      ?.post<MediaRequest | NothingRequested>(
+        Endpoints.API_V1 + Endpoints.REQUEST,
+        body,
+      )
       .then(({ data }) => data);
   }
 

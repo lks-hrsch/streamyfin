@@ -14,7 +14,7 @@ import { useGlobalModal } from "@/providers/GlobalModalProvider";
 const { Button, Host, Menu } = Platform.isTV
   ? ({} as typeof import("@expo/ui/swift-ui"))
   : require("@expo/ui/swift-ui");
-const { disabled } = Platform.isTV
+const { buttonStyle, disabled, menuIndicator, menuStyle } = Platform.isTV
   ? ({} as typeof import("@expo/ui/swift-ui/modifiers"))
   : require("@expo/ui/swift-ui/modifiers");
 
@@ -260,7 +260,22 @@ const PlatformDropdownComponent = ({
           // dropdown next to a focused input drew and never opened.
           ignoreSafeArea='keyboard'
         >
-          <Menu label={trigger}>
+          <Menu
+            label={trigger}
+            // The Mac's default menu style is a bordered pull-down button
+            // that keeps only text or an image from its label, so the
+            // trigger drew as an empty pill with a chevron. A plain button
+            // style lets the trigger draw itself, as it does on iOS.
+            modifiers={
+              Platform.isMacCatalyst
+                ? [
+                    menuStyle("button"),
+                    buttonStyle("plain"),
+                    menuIndicator("hidden"),
+                  ]
+                : undefined
+            }
+          >
             {groups.flatMap((group, groupIndex) => {
               // Check if this group has radio options
               const radioOptions = group.options.filter(

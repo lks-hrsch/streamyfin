@@ -1,4 +1,5 @@
-#if os(iOS)
+// Not on Mac Catalyst: ActivityKit's Activity API is iOS-only (the Mac has no Live Activities).
+#if os(iOS) && !targetEnvironment(macCatalyst)
   import ActivityKit
   import Foundation
   import os
