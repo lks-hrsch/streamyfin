@@ -32,7 +32,7 @@ export default function TVSeriesSeasonModalPage() {
   const initialSelectedIndex = useMemo(() => {
     if (!modalState?.seasons) return 0;
     const idx = modalState.seasons.findIndex((o) => o.selected);
-    return idx >= 0 ? idx : 0;
+    return Math.max(idx, 0);
   }, [modalState?.seasons]);
 
   // Animate in on mount

@@ -43,7 +43,7 @@ export default function TVOptionModal() {
   const initialSelectedIndex = useMemo(() => {
     if (!modalState?.options) return 0;
     const idx = modalState.options.findIndex((o) => o.selected);
-    return idx >= 0 ? idx : 0;
+    return Math.max(idx, 0);
   }, [modalState?.options]);
 
   // Animate in on mount and cleanup atom on unmount

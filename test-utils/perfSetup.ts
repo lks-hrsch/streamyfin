@@ -69,6 +69,8 @@ jest.mock("@/modules", () => {
       addProgressListener: () => ({ remove: () => {} }),
       addCompleteListener: () => ({ remove: () => {} }),
       addErrorListener: () => ({ remove: () => {} }),
+      addPausedListener: () => ({ remove: () => {} }),
+      addResumedListener: () => ({ remove: () => {} }),
       setLiveActivityEnabled: () => {},
     },
   };

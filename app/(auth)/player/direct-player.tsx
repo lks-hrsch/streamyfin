@@ -1564,7 +1564,7 @@ export default function DirectPlayerPage() {
       // keeps the correct local sub.
       const locals = itemId ? getSubtitlesForItem(itemId) : [];
       const pos = locals.findIndex((s) => s.filePath === path);
-      setCurrentSubtitleIndex(localSubtitleIndex(pos >= 0 ? pos : 0));
+      setCurrentSubtitleIndex(localSubtitleIndex(Math.max(pos, 0)));
       await videoRef.current?.addSubtitleFile?.(path, true);
     },
     [itemId],
