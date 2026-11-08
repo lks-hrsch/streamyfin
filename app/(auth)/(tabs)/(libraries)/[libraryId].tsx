@@ -3,11 +3,7 @@ import type {
   BaseItemDtoQueryResult,
   ItemFilter,
 } from "@jellyfin/sdk/lib/generated-client/models";
-import {
-  getFilterApi,
-  getItemsApi,
-  getUserLibraryApi,
-} from "@jellyfin/sdk/lib/utils/api";
+import { getFilterApi, getLibraryApi } from "@jellyfin/sdk/lib/utils/api";
 import { FlashList } from "@shopify/flash-list";
 import {
   keepPreviousData,
@@ -114,6 +110,7 @@ import {
 import type { TVOptionItem } from "@/utils/atoms/tvOptionModal";
 import { ALPHABET, alphabetJumpParams } from "@/utils/jellyfin/alphabetJump";
 import { getPrimaryImageUrl } from "@/utils/jellyfin/image/getPrimaryImageUrl";
+import { describeValueShape, isJellyfinId } from "@/utils/jellyfin/itemId";
 import {
   getLanguageFilterLabel,
   type LanguageFilterOption,
@@ -134,6 +131,7 @@ import {
   libraryTabUsesFilterBar,
 } from "@/utils/library/libraryTabs";
 import { withSelectedRatings } from "@/utils/library/officialRatings";
+import { writeToLog } from "@/utils/log";
 import { store } from "@/utils/store";
 
 /** Items per request of the grid; more load as the list is scrolled. */
@@ -167,7 +165,7 @@ interface LanguageFilterEntry {
   set: (languages: string[]) => void;
 }
 
-const Page = () => {
+const LibraryPage = () => {
   const searchParams = useLocalSearchParams() as {
     libraryId: string;
     sortBy?: string;
@@ -511,7 +509,7 @@ const Page = () => {
     queryKey: ["library", libraryId],
     queryFn: async () => {
       if (!api) return null;
-      const response = await getUserLibraryApi(api).getItem({
+      const response = await getLibraryApi(api).getItem({
         itemId: libraryId,
         userId: user?.Id,
       });
@@ -692,7 +690,7 @@ const Page = () => {
       // the two cannot drift apart. A collections or playlists tab swaps it,
       // and the item type, for its own.
       const itemsQuery = buildLibraryItemsQuery(libraryFilter);
-      const response = await getItemsApi(api).getItems(
+      const response = await getLibraryApi(api).getItems(
         {
           userId: itemsQuery.userId,
           parentId: itemsQuery.parentId,
@@ -1688,6 +1686,51 @@ const Page = () => {
       )}
     </ScrollView>
   );
+};
+
+/** What the route shows for a link that does not name a library. */
+const LibraryNotFound = () => {
+  const { t } = useTranslation();
+  const typography = useScaledTVTypography();
+  return (
+    <View className='w-full h-full flex items-center justify-center px-8'>
+      {Platform.isTV ? (
+        <Text style={{ fontSize: typography.body, color: "#737373" }}>
+          {t("not_found.title")}
+        </Text>
+      ) : (
+        <Text className='font-bold text-xl text-neutral-500 text-center'>
+          {t("not_found.title")}
+        </Text>
+      )}
+    </View>
+  );
+};
+
+/**
+ * The route answers any one-word link, so its id is checked before anything is
+ * asked of the server: the music notification's link on Android reached it as
+ * the library "notification.click" (Sentry REACT-NATIVE-EM and EN). Covered by
+ * components/library/libraryPage.test.tsx.
+ */
+const Page = () => {
+  const { libraryId } = useLocalSearchParams<{
+    libraryId?: string | string[];
+  }>();
+  const isLibraryId = isJellyfinId(libraryId);
+  // The link is the user's or another app's, so the log gets its shape only.
+  const refusedShape = isLibraryId ? null : describeValueShape(libraryId);
+
+  useEffect(() => {
+    if (!refusedShape) return;
+    writeToLog(
+      "WARN",
+      `Did not open a library: its libraryId (${refusedShape}) is not a Jellyfin id`,
+    );
+  }, [refusedShape]);
+
+  if (!isLibraryId) return <LibraryNotFound />;
+  return <LibraryPage />;
 };
 
 export default React.memo(Page);

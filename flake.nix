@@ -43,7 +43,7 @@
 
           # Xcode itself can't come from nix; these can. Taking them from nix
           # keeps rbenv/Homebrew Ruby out of the iOS build.
-          iosTools = lib.optionals pkgs.stdenv.isDarwin (
+          iosTools = lib.optionals pkgs.stdenv.hostPlatform.isDarwin (
             with pkgs;
             [
               cocoapods

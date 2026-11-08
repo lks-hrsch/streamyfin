@@ -1,5 +1,7 @@
 import { act, render, screen } from "@testing-library/react-native";
+import { getDefaultStore } from "jotai";
 import { Text } from "react-native";
+import { apiAtom } from "@/providers/JellyfinProvider";
 import { clearMmkv } from "@/test-utils/mmkv";
 import { storage } from "@/utils/mmkv";
 import type { LocalNetworkConfig } from "@/utils/secureCredentials";
@@ -29,6 +31,10 @@ jest.mock("@/providers/JellyfinProvider", () => ({
 }));
 
 const REMOTE_URL = "https://jellyfin.example.com";
+const LOCAL_URL = "http://192.168.1.10:8096";
+
+const store = getDefaultStore();
+const apiOn = (basePath: string) => store.set(apiAtom, { basePath } as never);
 
 /** A signed-in install whose server has this LAN config, on its home Wi-Fi. */
 const atHomeWith = (localNetworkConfig: LocalNetworkConfig) => {
@@ -42,6 +48,12 @@ const atHomeWith = (localNetworkConfig: LocalNetworkConfig) => {
 const UrlInUse = () => (
   <Text>{useServerUrl().isUsingLocalUrl ? "local" : "remote"}</Text>
 );
+
+/** Hands the provider's refreshUrlState out to the test on every render. */
+const Refresher = ({ expose }: { expose: (refresh: () => void) => void }) => {
+  expose(useServerUrl().refreshUrlState);
+  return null;
+};
 
 /** Mounts the provider and lets the SSID debounce run out. */
 const settle = async () => {
@@ -59,7 +71,10 @@ describe("ServerUrlProvider", () => {
   beforeEach(() => {
     jest.useFakeTimers();
     clearMmkv();
-    mockSwitchServerUrl.mockClear();
+    mockSwitchServerUrl.mockReset();
+    // The real switch replaces the api, which is what the next evaluation reads.
+    mockSwitchServerUrl.mockImplementation(apiOn);
+    apiOn(REMOTE_URL);
   });
 
   afterEach(() => {
@@ -91,8 +106,7 @@ describe("ServerUrlProvider", () => {
 
       await settle();
 
-      expect(mockSwitchServerUrl).toHaveBeenCalledTimes(1);
-      expect(mockSwitchServerUrl).toHaveBeenLastCalledWith(REMOTE_URL);
+      expect(mockSwitchServerUrl).not.toHaveBeenCalled();
       expect(screen.getByText("remote")).toBeTruthy();
     },
   );
@@ -116,13 +130,13 @@ describe("ServerUrlProvider", () => {
       ]),
     );
     let refresh = () => {};
-    const Refresher = () => {
-      refresh = useServerUrl().refreshUrlState;
-      return null;
-    };
     await render(
       <ServerUrlProvider>
-        <Refresher />
+        <Refresher
+          expose={(next) => {
+            refresh = next;
+          }}
+        />
       </ServerUrlProvider>,
     );
     await act(async () => {
@@ -151,6 +165,46 @@ describe("ServerUrlProvider", () => {
 
     await settle();
 
+    expect(mockSwitchServerUrl).not.toHaveBeenCalled();
+    expect(screen.getByText("remote")).toBeTruthy();
+  });
+
+  // Each switch builds a new api, which closes and reopens the WebSocket and
+  // posts the capabilities again, for an address the api already has.
+  test("keeps the api when it is already on the local URL", async () => {
+    apiOn(LOCAL_URL);
+    atHomeWith({
+      enabled: true,
+      localUrl: LOCAL_URL,
+      homeWifiSSIDs: ["Home"],
+    });
+
+    await settle();
+
+    expect(mockSwitchServerUrl).not.toHaveBeenCalled();
+    expect(screen.getByText("local")).toBeTruthy();
+  });
+
+  // The api drops one trailing slash from its base path.
+  test("keeps the api when storage holds the same URL with a trailing slash", async () => {
+    storage.set("serverUrl", `${REMOTE_URL}/`);
+
+    await settle();
+
+    expect(mockSwitchServerUrl).not.toHaveBeenCalled();
+  });
+
+  test("leaves the local URL for the remote one when Wi-Fi is not home", async () => {
+    apiOn(LOCAL_URL);
+    atHomeWith({
+      enabled: true,
+      localUrl: LOCAL_URL,
+      homeWifiSSIDs: ["Elsewhere"],
+    });
+
+    await settle();
+
+    expect(mockSwitchServerUrl).toHaveBeenCalledTimes(1);
     expect(mockSwitchServerUrl).toHaveBeenLastCalledWith(REMOTE_URL);
     expect(screen.getByText("remote")).toBeTruthy();
   });
