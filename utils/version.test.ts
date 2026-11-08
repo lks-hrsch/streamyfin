@@ -1,4 +1,4 @@
-let mockBuild: Record<string, unknown> = {};
+let mockBuild: unknown;
 
 jest.mock("expo-application", () => ({
   nativeApplicationVersion: "0.56.0",
@@ -15,33 +15,48 @@ jest.mock("expo-constants", () => ({
 
 import { getVersionInfo } from "./version";
 
+const devFlag = __DEV__;
+const setDev = (value: boolean) => {
+  (globalThis as { __DEV__?: boolean }).__DEV__ = value;
+};
+
 describe("getVersionInfo", () => {
-  const dev = (globalThis as { __DEV__?: boolean }).__DEV__;
-  // A release build: the run number only shows outside development.
-  beforeEach(() => {
-    (globalThis as { __DEV__?: boolean }).__DEV__ = false;
-  });
-  afterEach(() => {
-    (globalThis as { __DEV__?: boolean }).__DEV__ = dev;
+  beforeEach(() => setDev(false));
+  afterAll(() => setDev(devFlag));
+
+  it("pins a CI build to its commit and run", () => {
+    mockBuild = {
+      commit: "abc1234",
+      branch: "develop",
+      profile: "ci",
+      runNumber: "2098",
+    };
+    expect(getVersionInfo().display).toBe("0.56.0 · abc1234 · #2098");
   });
 
-  // Expo embeds a null config value as {} in the app's config; a local build
-  // has neither a profile nor a run number.
-  test("an embedded empty object reads as absent, not as text", () => {
+  it("shows the bare version on a production build", () => {
+    mockBuild = { commit: "abc1234", profile: "production", runNumber: "7" };
+    expect(getVersionInfo().display).toBe("0.56.0");
+  });
+
+  it("shows the branch and commit on a dev build", () => {
+    setDev(true);
+    mockBuild = { commit: "abc1234", branch: "feat/x" };
+    expect(getVersionInfo().display).toBe("0.56.0 · feat/x · abc1234");
+  });
+
+  // app.config.ts leaves what a local build lacks empty, and the embedded
+  // config is what Expo serialized: it turns a null into an empty object.
+  it("leaves out what a local build does not know", () => {
     mockBuild = {
-      commit: "4faddc5",
-      branch: "develop",
+      commit: "abc1234",
+      branch: "main",
       profile: {},
       runNumber: {},
     };
     const info = getVersionInfo();
-    expect(info.runNumber).toBeNull();
+    expect(info.display).toBe("0.56.0 · abc1234");
     expect(info.profile).toBeNull();
-    expect(info.display).not.toContain("object");
-  });
-
-  test("a CI build shows its run number", () => {
-    mockBuild = { commit: "4faddc5", profile: "ci", runNumber: "2098" };
-    expect(getVersionInfo().display).toBe("0.56.0 · 4faddc5 · #2098");
+    expect(info.runNumber).toBeNull();
   });
 });
