@@ -59,10 +59,10 @@ export function getVersionInfo(): VersionInfo {
   const version = read(() => Application.nativeApplicationVersion);
   const build = read(() => Application.nativeBuildVersion);
   const meta = (read(() => Constants.expoConfig?.extra?.build) ??
-    {}) as BuildMeta;
-  // Expo embeds a null config value as an empty object, so a local build's
-  // missing run number arrived as {} and read "#[object Object]".
-  const text = (value: unknown): string | null =>
+    {}) as Partial<Record<keyof BuildMeta, unknown>>;
+  // Expo serializes a null in the app config as an empty object, so a field
+  // app.config.ts left at null for a local build arrives here as `{}`.
+  const text = (value: unknown) =>
     typeof value === "string" && value !== "" ? value : null;
   const commit = text(meta.commit);
   const branch = text(meta.branch);
