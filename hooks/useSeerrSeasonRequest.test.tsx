@@ -142,4 +142,26 @@ describe("useSeerrSeasonRequest", () => {
     const { result } = await render({ opened: { seasons: "all" } });
     await waitFor(() => expect(result.current.selected).toEqual([2]));
   });
+
+  // The library's series page knows a season is there before Seerr does: the
+  // sheet it opens must not offer it again.
+  test("shows a season the library holds as available, not to choose", async () => {
+    const { result } = await render({ held: new Set([2]) });
+    await waitFor(() =>
+      expect(result.current.label).toBe("seerr.already_requested"),
+    );
+    expect(result.current.unrequested).toEqual([]);
+    expect(
+      result.current.rows.find((row) => row.seasonNumber === 2),
+    ).toMatchObject({ badge: "available", locked: true });
+    expect(result.current.blocked).toBe(true);
+  });
+
+  test("leaves a held season out of a whole-series request", async () => {
+    mockSettings.enableSpecialEpisodes = true;
+    mockSettings.partialRequestsEnabled = false;
+    const { result } = await render({ held: new Set([2]) });
+    await waitFor(() => expect(result.current.blocked).toBe(false));
+    expect(result.current.seasons).toEqual([0]);
+  });
 });

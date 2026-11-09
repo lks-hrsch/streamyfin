@@ -172,6 +172,7 @@ export default function TVSeasonSelectModalPage() {
     details: modalState?.series,
     enabled: !!modalState,
     quotaUserId: seerrUser?.id,
+    held: modalState?.heldSeasons,
   });
 
   const overlayOpacity = useRef(new Animated.Value(0)).current;

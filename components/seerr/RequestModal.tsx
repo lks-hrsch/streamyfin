@@ -29,6 +29,7 @@ import {
   requestTagIds,
   requestTagsLabel,
 } from "@/utils/seerr/requests";
+import type { HeldSeasons } from "@/utils/seerr/seasons";
 import {
   defaultRequestServer,
   requestServers,
@@ -52,6 +53,8 @@ interface Props {
   is4k?: boolean;
   /** A series' details: its seasons are chosen here, as on Seerr. */
   details?: TvDetails;
+  /** Seasons the library holds in full, shown available rather than offered. */
+  heldSeasons?: HeldSeasons;
   /** Whether the user may pick the server, profile, folder, tags and user. */
   advanced?: boolean;
   onRequested?: () => void;
@@ -71,6 +74,7 @@ const RequestModal = forwardRef<
       isAnime = false,
       is4k = false,
       details,
+      heldSeasons,
       advanced = true,
       onRequested,
       onDismiss,
@@ -129,6 +133,7 @@ const RequestModal = forwardRef<
       quotaUserId:
         (advanced && forOthers ? requestOverrides.userId : undefined) ??
         seerrUser?.id,
+      held: heldSeasons,
     });
 
     // Reset all dropdown states when modal closes
