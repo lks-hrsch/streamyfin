@@ -35,7 +35,10 @@ export const seerrQueryString = (
     .join("&");
 
 /**
- * Seerr's first pages of results for what the user typed, each result once.
+ * Seerr's first pages of results for what the user typed, each result once. A
+ * result is told apart by its type and its number: a film, a series and a
+ * person each have numbers of their own on TMDB, so one number can be all
+ * three.
  *
  * The text goes out as typed. It used to go through URLSearchParams, which
  * reads its argument as a query string: "dune" went out as "dune=", which
@@ -59,7 +62,7 @@ export const searchSeerr = async (
 
   return uniqBy(
     [first, ...rest].flatMap((page) => page?.results ?? []),
-    "id",
+    (result) => `${result.mediaType}:${result.id}`,
   );
 };
 
