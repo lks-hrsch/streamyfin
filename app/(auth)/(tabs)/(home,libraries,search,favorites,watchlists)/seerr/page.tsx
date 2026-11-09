@@ -38,7 +38,11 @@ import { useDismissKeyboardOnLeave } from "@/hooks/useDismissKeyboardOnLeave";
 import { useSeerr } from "@/hooks/useSeerr";
 import { useSeerrRequestOffer } from "@/hooks/useSeerrRequestOffer";
 import { ANIME_KEYWORD_ID } from "@/utils/seerr/data";
-import { hasPermission, Permission } from "@/utils/seerr/permissions";
+import {
+  canCreateIssues,
+  hasPermission,
+  Permission,
+} from "@/utils/seerr/permissions";
 import type {
   MediaRequest,
   MediaRequestBody,
@@ -190,6 +194,10 @@ const MobilePage: React.FC = () => {
   // Set once the library has the title. Read here rather than in the press
   // handler below, which would lose the check the button was drawn behind.
   const jellyfinMediaId = details?.mediaInfo?.jellyfinMediaId;
+  // Only for those Seerr takes an issue from: anyone else would fill in the
+  // sheet to be refused.
+  const offersIssueReport =
+    !!jellyfinMediaId && canCreateIssues(seerrUser?.permissions);
 
   return (
     <View
@@ -330,7 +338,7 @@ const MobilePage: React.FC = () => {
                         </Text>
                       </Button>
                     )}
-                    {jellyfinMediaId && !Platform.isTV && (
+                    {offersIssueReport && !Platform.isTV && (
                       <TouchableOpacity
                         accessibilityRole='button'
                         accessibilityLabel={t("seerr.report_issue_button")}
