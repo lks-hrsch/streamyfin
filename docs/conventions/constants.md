@@ -41,6 +41,7 @@ cadence meant knowing both existed, and nothing would have failed if only one ha
 | `constants/Music.ts` | Music player policy: the volume normalization modes, their default, and the gain ceiling; the storage key of the stored tracks index |
 | `constants/Streamystats.ts` | Streamystats server: how long a watchlists request waits for an answer, and how many times a refresh behind lists already shown is retried |
 | `constants/Search.ts` | Library search: results asked for per section, the person types the People section leaves out, a studio page's size |
+| `constants/SeerrLibrarySearch.ts` | Seerr's search under the library's results: how long its first page is reused before Seerr is asked again, and how many of the library's titles it is checked against |
 | `constants/Inactivity.ts` | The TV inactivity sign-out's storage key for the last activity |
 | `constants/StillWatching.ts` | The "Still watching?" presets, jellyfin-web 12's episode counts and session minutes |
 | `constants/Sentry.ts` | Error reporting policy: which builds report, the per session dedupe cap, the failure storm window |
