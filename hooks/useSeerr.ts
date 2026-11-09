@@ -11,6 +11,7 @@ import {
 } from "@/constants/Seerr";
 import { storage } from "@/utils/mmkv";
 import type { Results, User as SeerrUser } from "@/utils/seerr/types";
+import { store } from "@/utils/store";
 import "@/augmentations";
 import { t } from "i18next";
 import { useCallback, useMemo } from "react";
@@ -119,6 +120,15 @@ export enum Endpoints {
   AUTH_JELLYFIN_QUICK_CONNECT_AUTHENTICATE = `${AUTH_JELLYFIN}/quickconnect/authenticate`,
   USER_JELLYFIN = `${USER}/jellyfin`,
 }
+
+// The sign-ins, whose 401 is a wrong password or a Quick Connect not approved
+// yet rather than a session lost. Exact paths: GET /auth/me shares the prefix,
+// and its 401 says most plainly that no one is signed in.
+const SIGN_IN_PATHS: ReadonlySet<string> = new Set([
+  Endpoints.API_V1 + Endpoints.AUTH_JELLYFIN,
+  Endpoints.API_V1 + Endpoints.AUTH_JELLYFIN_QUICK_CONNECT_INITIATE,
+  Endpoints.API_V1 + Endpoints.AUTH_JELLYFIN_QUICK_CONNECT_AUTHENTICATE,
+]);
 
 export type DiscoverEndpoint =
   | Endpoints.DISCOVER_TV_NETWORK
@@ -663,10 +673,18 @@ export class SeerrApi {
             truncateForLog(error.response.data),
           );
         }
-        // Only a read refused means the session is gone: a request past the
-        // quota is refused with a 403 too, and signed the user out of Seerr.
-        if (endsSeerrSession(status, error.config?.method, path)) {
-          clearSeerrStorageData();
+        // A 401 outside the sign-ins ends the session whatever the method; of
+        // the 403s only a read refused does: a request past the quota is
+        // refused with a 403 too, and signed the user out of Seerr.
+        if (
+          endsSeerrSession(
+            status,
+            error.config?.method,
+            path,
+            SIGN_IN_PATHS.has(path ?? ""),
+          )
+        ) {
+          forgetSeerrSession();
         }
         return Promise.reject(error);
       },
@@ -706,7 +724,23 @@ export class SeerrApi {
   }
 }
 
-const seerrUserAtom = atom(storage.get<SeerrUser>(SEERR_USER_STORAGE_KEY));
+export const seerrUserAtom = atom(
+  storage.get<SeerrUser>(SEERR_USER_STORAGE_KEY),
+);
+
+/**
+ * Forgets a session Seerr no longer has, in storage and in the user the app
+ * holds: with that user still set the client stayed up and SeerrAutoLogin saw
+ * nothing to do, so every page kept failing until the next launch.
+ *
+ * The cached Seerr queries stay. The same Jellyfin user signs in again, the
+ * quota is keyed by Seerr user, and Discover keeps what it showed rather than
+ * going blank in between; signing out (clearAllSeerrData) drops them.
+ */
+function forgetSeerrSession() {
+  clearSeerrStorageData();
+  store.set(seerrUserAtom, undefined);
+}
 
 /** The server's public settings, one query for every reader. */
 export const seerrPublicSettingsQuery = (seerrApi: SeerrApi | undefined) => ({
@@ -760,13 +794,12 @@ export const useSeerr = () => {
   const seerrApi = useSeerrImageCache(client);
 
   const clearAllSeerrData = useCallback(async () => {
-    clearSeerrStorageData();
+    forgetSeerrSession();
     // The cache outlives the session, on the device for a day: the next
     // Seerr would show this one's quota, seasons and settings.
     queryClient.removeQueries({
       predicate: (query) => isSeerrQuery(query.queryKey),
     });
-    setSeerrUser(undefined);
     updateSettings({
       seerrServerUrl: undefined,
       seerrApiKey: undefined,
