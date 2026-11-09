@@ -21,6 +21,7 @@ import { PlatformDropdown } from "@/components/PlatformDropdown";
 import { SheetColors } from "@/constants/Colors";
 import { useSeerr } from "@/hooks/useSeerr";
 import { writeErrorLog } from "@/utils/log";
+import { type IssueEpisode, issueReport } from "@/utils/seerr/libraryIssue";
 import { type IssueType, IssueTypeName } from "@/utils/seerr/types";
 import { createSubmission } from "@/utils/submission";
 
@@ -34,6 +35,10 @@ interface Props {
    * while Seerr has no record of it.
    */
   mediaId: number | undefined;
+  /** What the issue is about, under the heading. */
+  subject?: string;
+  /** The episode of a series the issue is about. */
+  episode?: IssueEpisode;
   /**
    * False while the page does not know which title it shows: a submit then
    * does nothing.
@@ -42,12 +47,12 @@ interface Props {
 }
 
 /**
- * The phone's report issue sheet on a Seerr title's page: the kind of issue,
- * what is wrong, and Seerr files it against the title. The TV has its own,
- * `tv-issue-modal`.
+ * The phone's report issue sheet: the kind of issue, what is wrong, and Seerr
+ * files it against the title. Shared by the Seerr page and the library's
+ * movie and episode pages. The TV has its own, `tv-issue-modal`.
  */
 export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
-  ({ mediaId, ready = true }, ref) => {
+  ({ mediaId, subject, episode, ready = true }, ref) => {
     const { t } = useTranslation();
     const { seerrApi } = useSeerr();
     const sheetRef = useRef<BottomSheetModal>(null);
@@ -85,8 +90,9 @@ export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
         return;
       // A second tap while the first is on its way would file the issue twice.
       if (!submission.start()) return;
+      const report = issueReport(message, episode);
       seerrApi
-        .submitIssue(mediaId, Number(issueType), message)
+        .submitIssue(mediaId, Number(issueType), report.message, report.problem)
         .then(() => {
           setIssueType(undefined);
           setMessage(undefined);
@@ -99,7 +105,7 @@ export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
           writeErrorLog("Seerr submitIssue failed", String(error));
         })
         .finally(() => submission.finish());
-    }, [ready, seerrApi, mediaId, issueType, message, submission]);
+    }, [ready, seerrApi, mediaId, issueType, message, episode, submission]);
 
     const handleDismiss = useCallback(() => {
       setIssueTypeDropdownOpen(false);
@@ -143,6 +149,11 @@ export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
               <Text className='font-bold text-2xl text-neutral-100'>
                 {t("seerr.whats_wrong")}
               </Text>
+              {subject ? (
+                <Text numberOfLines={1} className='opacity-50 mt-1'>
+                  {subject}
+                </Text>
+              ) : null}
             </View>
             <View className='flex flex-col items-start' style={{ gap: 8 }}>
               <View className='flex flex-col w-full'>
