@@ -1,4 +1,13 @@
-import { nextResultsPage, searchSeerr, seerrQueryString } from "./search";
+import { QueryClient } from "@tanstack/react-query";
+import { isSeerrQuery, touchedByRequest } from "./queries";
+import {
+  nextResultsPage,
+  type SeerrSearchApi,
+  searchSeerr,
+  seerrQueryString,
+  seerrSearchKey,
+  seerrSearchQuery,
+} from "./search";
 
 const fakeApi = (pages: { id: number; mediaType?: string }[][] = [[]]) => {
   const calls: { query: string; page: number }[] = [];
@@ -68,6 +77,73 @@ describe("searchSeerr", () => {
 
   test("finds nothing without a Seerr connection", async () => {
     expect(await searchSeerr(undefined, "dune")).toEqual([]);
+  });
+});
+
+// The fake server's answer to a page: a film numbered as the page, so a test
+// tells the pages apart, and one per server with `id`.
+const fakeServer = (
+  server = "https://seerr.example.com",
+  totalPages = 1,
+  id?: number,
+) => {
+  const calls: { query: string; page: number }[] = [];
+  const api = {
+    axios: { defaults: { baseURL: server } },
+    search: async (params: { query: string; page: number }) => {
+      calls.push(params);
+      return {
+        page: params.page,
+        totalPages,
+        totalResults: totalPages * 20,
+        results: [{ id: id ?? params.page, mediaType: "movie" }],
+      };
+    },
+  };
+  return { api: api as never as SeerrSearchApi, calls };
+};
+
+const clients: QueryClient[] = [];
+
+const newClient = () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  clients.push(client);
+  return client;
+};
+
+// Each cached query holds a collection timer, which kept Jest from exiting
+// for the five minutes it runs.
+afterEach(() => {
+  for (const client of clients.splice(0)) client.clear();
+});
+
+describe("seerrSearchQuery", () => {
+  // The plugin can point the app at another Seerr without a sign-out, which
+  // leaves the cache as it was.
+  test("answers for a server with that server's results", async () => {
+    const client = newClient();
+    const first = fakeServer("https://seerr-a.example.com", 1, 1);
+    const second = fakeServer("https://seerr-b.example.com", 1, 2);
+
+    await client.fetchQuery(seerrSearchQuery(first.api, "dune"));
+    const results = await client.fetchQuery({
+      ...seerrSearchQuery(second.api, "dune"),
+      staleTime: Infinity,
+    });
+
+    expect(second.calls).toHaveLength(1);
+    expect(results.map((result) => result.id)).toEqual([2]);
+  });
+
+  // With the server in the key, a request must still mark the results out of
+  // date, and a reset of Seerr must still take them out of the cache.
+  test("is still found by a request and by a reset of Seerr", () => {
+    const key = seerrSearchKey(fakeServer().api, "dune");
+
+    expect(touchedByRequest()(key)).toBe(true);
+    expect(isSeerrQuery(key)).toBe(true);
   });
 });
 

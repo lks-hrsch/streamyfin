@@ -67,7 +67,7 @@ import { getPrimaryImageUrl } from "@/utils/jellyfin/image/getPrimaryImageUrl";
 import { searchPeople, searchStudios } from "@/utils/jellyfin/search";
 import { logAndCaptureError } from "@/utils/log";
 import { isSeerrQuery } from "@/utils/seerr/queries";
-import { searchSeerr } from "@/utils/seerr/search";
+import { seerrSearchQuery } from "@/utils/seerr/search";
 import { loadDiscoverSliders } from "@/utils/seerr/sliders";
 import type { MovieResult, PersonResult, TvResult } from "@/utils/seerr/types";
 import { MediaType } from "@/utils/seerr/types";
@@ -573,12 +573,9 @@ export default function SearchPage() {
     [from, router],
   );
 
-  // Seerr search for TV
+  // Seerr search for TV, under the phone's Discover key (SeerrIndexPage)
   const { data: seerrTVResults, isFetching: seerrTVLoading } = useQuery({
-    queryKey: ["search", "seerr", "tv", debouncedSearch],
-    queryFn: async () => {
-      return await searchSeerr(seerrApi, debouncedSearch);
-    },
+    ...seerrSearchQuery(seerrApi, debouncedSearch),
     enabled:
       Platform.isTV &&
       !!seerrApi &&
