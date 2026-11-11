@@ -76,12 +76,34 @@ describe("SeerrIssueSheet", () => {
     await fillIn("Audio", "No sound");
     await submit();
 
+    // A movie or a whole series names no season: the body is as before.
     expect(mockSubmitIssue).toHaveBeenCalledWith(
       42,
       IssueType.AUDIO,
       "No sound",
+      undefined,
     );
     expect(mockClose).toHaveBeenCalledTimes(1);
+  });
+
+  test("names the episode, and shows what is reported", async () => {
+    await render(
+      <SeerrIssueSheet
+        mediaId={7}
+        subject='Breaking Bad · S02E05'
+        episode={{ season: 2, episode: 5, name: "Grilled" }}
+      />,
+    );
+    expect(screen.getByText("Breaking Bad · S02E05")).toBeTruthy();
+    await fillIn("Video", "Green frames");
+    await submit();
+
+    expect(mockSubmitIssue).toHaveBeenCalledWith(
+      7,
+      IssueType.VIDEO,
+      "Green frames",
+      { season: 2, episode: 5 },
+    );
   });
 
   test("a second tap while the first is on its way files it once", async () => {

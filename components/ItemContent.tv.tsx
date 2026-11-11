@@ -26,6 +26,7 @@ import { Image } from "@/components/common/ServerImage";
 import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
 import { GenreTags } from "@/components/GenreTags";
+import { TVLibraryIssueButton } from "@/components/seerr/tv/TVLibraryIssueButton";
 import { TVEpisodeList } from "@/components/series/TVEpisodeList";
 import { TVSyncPlayButton } from "@/components/syncplay/TVSyncPlayButton";
 import { TVSimilarItems } from "@/components/TVSimilarItems";
@@ -859,6 +860,7 @@ export const ItemContentTV: React.FC<ItemContentTVProps> = React.memo(
                 {!isOffline && item.Type !== "Program" && (
                   <TVSyncPlayButton items={[item]} title={item.Name} />
                 )}
+                <TVLibraryIssueButton item={item} />
               </View>
 
               {/* Playback options */}
