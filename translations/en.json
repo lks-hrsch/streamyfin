@@ -1113,8 +1113,6 @@
     "cancel": "Cancel",
     "whats_wrong": "What's wrong?",
     "issue_type": "Issue type",
-    "select_an_issue": "Select an issue",
-    "types": "Types",
     "issue_details": "Please provide a detailed explanation of the issue you encountered.",
     "submit_button": "Submit",
     "report_issue_button": "Report issue",
