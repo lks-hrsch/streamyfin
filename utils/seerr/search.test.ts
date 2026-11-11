@@ -1,6 +1,6 @@
 import { nextResultsPage, searchSeerr, seerrQueryString } from "./search";
 
-const fakeApi = (pages: { id: number }[][] = [[]]) => {
+const fakeApi = (pages: { id: number; mediaType?: string }[][] = [[]]) => {
   const calls: { query: string; page: number }[] = [];
   const api = {
     search: async (params: { query: string; page: number }) => {
@@ -48,6 +48,22 @@ describe("searchSeerr", () => {
     const results = await searchSeerr(api, "dune");
 
     expect(results.map((result) => result.id)).toEqual([1, 2, 3]);
+  });
+
+  test("keeps a film and a series that share a TMDB number", async () => {
+    const { api } = fakeApi([
+      [
+        { id: 1399, mediaType: "movie" },
+        { id: 1399, mediaType: "tv" },
+      ],
+      [{ id: 1399, mediaType: "tv" }],
+    ]);
+
+    const results = await searchSeerr(api, "got");
+
+    expect(results.map((result) => `${result.mediaType}:${result.id}`)).toEqual(
+      ["movie:1399", "tv:1399"],
+    );
   });
 
   test("finds nothing without a Seerr connection", async () => {
