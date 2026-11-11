@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -41,6 +42,7 @@ export const SeerrIndexPage: React.FC<Props> = ({
   order,
 }) => {
   const { seerrApi } = useSeerr();
+  const queryClient = useQueryClient();
   const opacity = useSharedValue(1);
   const { t } = useTranslation();
 
@@ -59,7 +61,8 @@ export const SeerrIndexPage: React.FC<Props> = ({
     isFetching: f2,
     isLoading: l2,
   } = useReactNavigationQuery({
-    ...seerrSearchQuery(seerrApi, searchQuery),
+    // Starts from the first page the library search already fetched.
+    ...seerrSearchQuery(queryClient, seerrApi, searchQuery),
     enabled: !!seerrApi && searchQuery.length > 0,
   });
 

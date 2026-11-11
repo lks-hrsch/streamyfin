@@ -32,6 +32,7 @@ import {
   getItemNavigation,
   TouchableItemRouter,
 } from "@/components/common/TouchableItemRouter";
+import SeerrPoster from "@/components/posters/SeerrPoster";
 import { LoadingSkeleton } from "@/components/search/LoadingSkeleton";
 import { SearchItemWrapper } from "@/components/search/SearchItemWrapper";
 import { SearchSortMenu } from "@/components/search/SearchSortMenu";
@@ -55,6 +56,7 @@ import {
 import { SEARCH_RESULT_LIMIT } from "@/constants/Search";
 import useRouter from "@/hooks/useAppRouter";
 import { useSeerr } from "@/hooks/useSeerr";
+import { useSeerrLibrarySearch } from "@/hooks/useSeerrLibrarySearch";
 import { useServerVersion } from "@/hooks/useServerVersion";
 import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
 import { useTVOptionModal } from "@/hooks/useTVOptionModal";
@@ -83,7 +85,9 @@ const exampleSearches = [
 ];
 
 // The people and studio requests are covered by utils/jellyfin/search.test.ts,
-// the TV's studio section by components/search/TVSearchPage.test.tsx.
+// the TV's studio section by components/search/TVSearchPage.test.tsx, and what
+// Seerr adds under the library's results by hooks/useSeerrLibrarySearch.test.tsx
+// and utils/seerr/librarySearch.test.ts.
 export default function SearchPage() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -153,10 +157,13 @@ export default function SearchPage() {
     async ({
       types,
       query,
+      fields = [],
       signal,
     }: {
       types: BaseItemKind[];
       query: string;
+      // Asked for on top of DateCreated, which the sort by date added needs.
+      fields?: ItemFields[];
       signal?: AbortSignal;
     }): Promise<BaseItemDto[]> => {
       if (!api || !query) {
@@ -173,7 +180,7 @@ export default function SearchPage() {
               recursive: true,
               userId: user?.Id,
               // For the sort by date added.
-              fields: [ItemFields.DateCreated],
+              fields: [ItemFields.DateCreated, ...fields],
             },
             { signal },
           );
@@ -226,7 +233,7 @@ export default function SearchPage() {
             {
               ids: allIds,
               enableImageTypes: ["Primary", "Backdrop", "Thumb"],
-              fields: [ItemFields.DateCreated],
+              fields: [ItemFields.DateCreated, ...fields],
             },
             { signal },
           );
@@ -258,7 +265,7 @@ export default function SearchPage() {
           {
             ids,
             enableImageTypes: ["Primary", "Backdrop", "Thumb"],
-            fields: [ItemFields.DateCreated],
+            fields: [ItemFields.DateCreated, ...fields],
           },
           { signal },
         );
@@ -360,12 +367,16 @@ export default function SearchPage() {
     };
   }, []);
 
+  // The TMDB numbers keep a film or a series found here out of the titles
+  // Seerr lists as not in the library (notInLibrary). Jellyfin's item search
+  // leaves ProviderIds out unless asked for them.
   const { data: moviesFound, isFetching: l1 } = useQuery({
     queryKey: ["search", "movies", debouncedSearch],
     queryFn: ({ signal }) =>
       searchFn({
         query: debouncedSearch,
         types: ["Movie"],
+        fields: [ItemFields.ProviderIds],
         signal,
       }),
     enabled: searchType === "Library" && debouncedSearch.length > 0,
@@ -377,6 +388,7 @@ export default function SearchPage() {
       searchFn({
         query: debouncedSearch,
         types: ["Series"],
+        fields: [ItemFields.ProviderIds],
         signal,
       }),
     enabled: searchType === "Library" && debouncedSearch.length > 0,
@@ -564,6 +576,19 @@ export default function SearchPage() {
     return l1 || l2 || l3 || l7 || l8 || l9 || l10 || l11 || l12 || l13;
   }, [l1, l2, l3, l7, l8, l9, l10, l11, l12, l13]);
 
+  // What Seerr could add, under the library's results. Its first page only:
+  // this runs for every text typed, and Discover starts from the same page.
+  const foundTitles = useMemo(
+    () => [...(moviesFound ?? []), ...(seriesFound ?? [])],
+    [moviesFound, seriesFound],
+  );
+  const seerrNotInLibrary = useSeerrLibrarySearch({
+    seerrApi,
+    query: debouncedSearch,
+    enabled: searchType === "Library",
+    found: foundTitles,
+  });
+
   // TV item press handler
   const handleItemPress = useCallback(
     (item: BaseItemDto) => {
@@ -575,7 +600,7 @@ export default function SearchPage() {
 
   // Seerr search for TV, under the phone's Discover key (SeerrIndexPage)
   const { data: seerrTVResults, isFetching: seerrTVLoading } = useQuery({
-    ...seerrSearchQuery(seerrApi, debouncedSearch),
+    ...seerrSearchQuery(queryClient, seerrApi, debouncedSearch),
     enabled:
       Platform.isTV &&
       !!seerrApi &&
@@ -693,6 +718,14 @@ export default function SearchPage() {
     [router],
   );
 
+  const handleSeerrResultPress = useCallback(
+    (item: MovieResult | TvResult) => {
+      if (item.mediaType === MediaType.MOVIE) handleSeerrMoviePress(item);
+      else handleSeerrTvPress(item);
+    },
+    [handleSeerrMoviePress, handleSeerrTvPress],
+  );
+
   // The sort of the tab on screen: Seerr's for Discover, the Library's
   // otherwise. Relevance has no order to pick.
   const seerrSorts = useMemo(
@@ -795,6 +828,8 @@ export default function SearchPage() {
         onSeerrMoviePress={handleSeerrMoviePress}
         onSeerrTvPress={handleSeerrTvPress}
         onSeerrPersonPress={handleSeerrPersonPress}
+        seerrNotInLibrary={seerrNotInLibrary}
+        onSeerrResultPress={handleSeerrResultPress}
         discoverSliders={discoverSliders}
       />
     );
@@ -1090,6 +1125,26 @@ export default function SearchPage() {
               ))}
             </View>
           ) : null)}
+
+        {/* After the library's results, and after the line saying it has
+            none: what the user could request instead. */}
+        {searchType === "Library" &&
+          !loading &&
+          debouncedSearch.length > 0 &&
+          seerrNotInLibrary.length > 0 && (
+            <View className='mt-4'>
+              <SearchItemWrapper
+                header={t("seerr.library_search.not_in_your_library")}
+                items={seerrNotInLibrary}
+                renderItem={(item: MovieResult | TvResult) => (
+                  <SeerrPoster
+                    item={item}
+                    key={`${item.mediaType}-${item.id}`}
+                  />
+                )}
+              />
+            </View>
+          )}
       </View>
     </ScrollView>
   );
