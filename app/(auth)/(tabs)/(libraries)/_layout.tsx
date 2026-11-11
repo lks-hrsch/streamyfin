@@ -9,6 +9,7 @@ import {
   commonScreenOptions,
   nestedTabPageScreenOptions,
   stackScreenOptions,
+  watchlistSheetScreenOptions,
 } from "@/components/stacks/NestedTabPageStack";
 import { useSettings } from "@/utils/atoms/settings";
 
@@ -219,6 +220,9 @@ export default function IndexLayout() {
         }}
       />
       {Object.entries(nestedTabPageScreenOptions).map(([name, options]) => (
+        <Stack.Screen key={name} name={name} options={options} />
+      ))}
+      {Object.entries(watchlistSheetScreenOptions(t)).map(([name, options]) => (
         <Stack.Screen key={name} name={name} options={options} />
       ))}
       <Stack.Screen

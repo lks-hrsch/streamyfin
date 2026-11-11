@@ -1,4 +1,5 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
+import type { TFunction } from "i18next";
 import {
   departmentKind,
   personCredits,
@@ -192,8 +193,8 @@ describe("personFilmography", () => {
 });
 
 // Returns the key and its options, so the test reads what would be shown.
-const t = (key: string, options?: Record<string, unknown>) =>
-  options ? `${key} ${JSON.stringify(options)}` : key;
+const t = ((key: string, options?: Record<string, unknown>) =>
+  options ? `${key} ${JSON.stringify(options)}` : key) as unknown as TFunction;
 
 describe("personFactLines", () => {
   test("says what a living person is known for, and their age", () => {

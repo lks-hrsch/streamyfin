@@ -27,8 +27,8 @@ describe("opensSeerrPages", () => {
 
   // Seerr's posters draw nothing there, so a link would lead nowhere.
   test("does not from the other tabs", () => {
-    expect(opensSeerrPages("(favorites)")).toBe(false);
-    expect(opensSeerrPages("(watchlists)")).toBe(false);
+    expect(opensSeerrPages("(more)")).toBe(false);
+    expect(opensSeerrPages("(tv-watchlists)")).toBe(false);
     expect(opensSeerrPages(undefined)).toBe(false);
   });
 });

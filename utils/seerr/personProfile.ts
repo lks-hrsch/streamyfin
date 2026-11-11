@@ -1,4 +1,5 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
+import type { TFunction } from "i18next";
 import { tmdbIdOf } from "./jellyfinBridge";
 import {
   type CombinedCredit,
@@ -225,7 +226,7 @@ export const personFilmography = (
  * `today` ("YYYY-MM-DD") gives a living person's age.
  */
 export const personFactLines = (
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: TFunction,
   facts: PersonFacts,
   tag: string | undefined,
   today: string,

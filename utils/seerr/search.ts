@@ -3,7 +3,7 @@ import {
   queryOptions,
   skipToken,
 } from "@tanstack/react-query";
-import { uniqBy } from "lodash";
+import uniqBy from "lodash/uniqBy";
 import { SEERR_SEARCH_PAGES } from "@/constants/Seerr";
 import { SEERR_SEARCH_REUSE_MS } from "@/constants/SeerrLibrarySearch";
 import type { SeerrApi } from "@/hooks/useSeerr";

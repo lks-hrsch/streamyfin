@@ -66,7 +66,7 @@ describe("MissingFromCollection", () => {
 
   // Seerr's posters draw nothing there: Seerr is not even asked.
   test("asks Seerr nothing in a tab that does not open its pages", async () => {
-    mockSegments = ["(auth)", "(tabs)", "(watchlists)", "collections", "[id]"];
+    mockSegments = ["(auth)", "(tabs)", "(more)", "collections", "[id]"];
     mockMissing = [];
     await render(<MissingFromCollection collection={matrixCollection} />);
 

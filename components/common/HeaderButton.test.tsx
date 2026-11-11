@@ -4,7 +4,7 @@ import { HeaderButton, HeaderButtonGroup } from "./HeaderButton";
 
 jest.mock("react-native-gesture-handler", () => {
   const { Pressable } = jest.requireActual("react-native");
-  return { Pressable };
+  return { LegacyPressable: Pressable };
 });
 
 const setMacCatalyst = (value: boolean) =>

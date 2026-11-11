@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { useCallback, useEffect, useRef } from "react";
-import type { View } from "react-native";
+import type { ViewInstance } from "react-native";
 import { TVButton } from "@/components/tv/TVButton";
 import { useLibraryIssue } from "@/hooks/useLibraryIssue";
 import { useTVIssueModal } from "@/hooks/useTVIssueModal";
@@ -22,13 +22,13 @@ interface Props {
 export function TVLibraryIssueButton({ item }: Props) {
   const target = useLibraryIssue(item);
   const { showIssueModal } = useTVIssueModal();
-  const button = useRef<View | null>(null);
+  const button = useRef<ViewInstance | null>(null);
   const focusTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
   useEffect(() => () => clearTimeout(focusTimer.current), []);
 
-  const setButton = useCallback((ref: View | null) => {
+  const setButton = useCallback((ref: ViewInstance | null) => {
     button.current = ref;
   }, []);
 
@@ -39,7 +39,9 @@ export function TVLibraryIssueButton({ item }: Props) {
     focusTimer.current = setTimeout(
       () =>
         (
-          button.current as (View & { requestTVFocus?: () => void }) | null
+          button.current as
+            | (ViewInstance & { requestTVFocus?: () => void })
+            | null
         )?.requestTVFocus?.(),
       FOCUS_RESTORE_DELAY_MS,
     );
