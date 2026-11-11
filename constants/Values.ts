@@ -21,8 +21,8 @@ export const MEDIA_OPTIONS_BUTTON_SIZE = 48;
 export const MEDIA_OPTIONS_BUTTON_FILL_OPACITY = 0.7;
 
 /**
- * The row at the top of the Search screen on iOS: the Library and Discover
- * buttons, and the sort button, each in a SwiftUI host this high.
+ * The row at the top of the Search screen on iOS: the sort button, in a
+ * SwiftUI host this high.
  */
 export const SEARCH_TAB_ROW_HEIGHT = 40;
 

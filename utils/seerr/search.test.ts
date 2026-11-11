@@ -1,5 +1,4 @@
 import { QueryClient, type QueryClientConfig } from "@tanstack/react-query";
-import { SEERR_SEARCH_REUSE_MS } from "@/constants/SeerrLibrarySearch";
 import { isSeerrQuery, touchedByRequest } from "./queries";
 import {
   nextResultsPage,
@@ -8,8 +7,6 @@ import {
   seerrFirstPageKey,
   seerrFirstPageQuery,
   seerrQueryString,
-  seerrSearchKey,
-  seerrSearchQuery,
 } from "./search";
 
 const fakeApi = (pages: { id: number; mediaType?: string }[][] = [[]]) => {
@@ -124,39 +121,9 @@ afterEach(() => {
   for (const client of clients.splice(0)) client.clear();
 });
 
-describe("seerrSearchQuery", () => {
-  // The plugin can point the app at another Seerr without a sign-out, which
-  // leaves the cache as it was.
-  test("answers for a server with that server's results", async () => {
-    const client = newClient();
-    const first = fakeServer("https://seerr-a.example.com", 1, 1);
-    const second = fakeServer("https://seerr-b.example.com", 1, 2);
-
-    await client.fetchQuery(seerrSearchQuery(client, first.api, "dune"));
-    const results = await client.fetchQuery({
-      ...seerrSearchQuery(client, second.api, "dune"),
-      staleTime: Infinity,
-    });
-
-    expect(second.calls).toHaveLength(1);
-    expect(results.map((result) => result.id)).toEqual([2]);
-  });
-
-  // With the server in the key, a request must still mark the results out of
-  // date, and a reset of Seerr must still take them out of the cache.
-  test("is still found by a request and by a reset of Seerr", () => {
-    for (const key of [
-      seerrSearchKey(fakeServer().api, "dune"),
-      seerrFirstPageKey(fakeServer().api, "dune"),
-    ]) {
-      expect(touchedByRequest()(key)).toBe(true);
-      expect(isSeerrQuery(key)).toBe(true);
-    }
-  });
-});
-
-describe("the Seerr search Library and Discover share", () => {
-  test("the library search asks Seerr for the first page alone", async () => {
+describe("seerrFirstPageQuery", () => {
+  // It runs for every text typed, so it asks for the first page only.
+  test("asks Seerr for the first page alone", async () => {
     const { api, calls } = fakeServer(undefined, 5);
 
     await newClient().fetchQuery(seerrFirstPageQuery(api, "dune"));
@@ -164,31 +131,43 @@ describe("the Seerr search Library and Discover share", () => {
     expect(calls).toEqual([{ query: "dune", page: 1 }]);
   });
 
-  test("Discover starts from the first page the library search has", async () => {
+  // The plugin can point the app at another Seerr without a sign-out, which
+  // leaves the cache as it was.
+  test("answers for a server with that server's results", async () => {
     const client = newClient();
-    const { api, calls } = fakeServer(undefined, 3);
+    const first = fakeServer("https://seerr-a.example.com", 1, 1);
+    const second = fakeServer("https://seerr-b.example.com", 1, 2);
 
-    await client.fetchQuery(seerrFirstPageQuery(api, "dune"));
-    const results = await client.fetchQuery(
-      seerrSearchQuery(client, api, "dune"),
+    await client.fetchQuery(seerrFirstPageQuery(first.api, "dune"));
+    const page = await client.fetchQuery(
+      seerrFirstPageQuery(second.api, "dune"),
     );
 
-    expect(calls.map((call) => call.page)).toEqual([1, 2, 3]);
-    expect(results.map((result) => result.id)).toEqual([1, 2, 3]);
+    expect(second.calls).toHaveLength(1);
+    expect(page.results.map((result) => result.id)).toEqual([2]);
   });
 
-  test("the library search finds the first page Discover asked for", async () => {
+  test("a first page is only good for its own text", async () => {
     const client = newClient();
-    const { api, calls } = fakeServer(undefined, 2);
+    const { api, calls } = fakeServer();
 
-    await client.fetchQuery(seerrSearchQuery(client, api, "dune"));
     await client.fetchQuery(seerrFirstPageQuery(api, "dune"));
+    await client.fetchQuery(seerrFirstPageQuery(api, "dun"));
 
-    expect(calls.map((call) => call.page)).toEqual([1, 2]);
+    expect(calls.map((call) => call.query)).toEqual(["dune", "dun"]);
   });
 
-  // A request changes a title's status: the first page is asked again rather
-  // than reused (touchedByRequest invalidates every Seerr search).
+  // With the server in the key, a request must still mark the page out of
+  // date, and a reset of Seerr must still take it out of the cache.
+  test("is still found by a request and by a reset of Seerr", () => {
+    const key = seerrFirstPageKey(fakeServer().api, "dune");
+
+    expect(touchedByRequest()(key)).toBe(true);
+    expect(isSeerrQuery(key)).toBe(true);
+  });
+
+  // A request changes a title's status: the page is asked again rather than
+  // reused for the rest of the minute.
   test("asks again for a first page that was invalidated", async () => {
     const client = newClient();
     const { api, calls } = fakeServer();
@@ -197,68 +176,9 @@ describe("the Seerr search Library and Discover share", () => {
     await client.invalidateQueries({
       predicate: (query) => touchedByRequest()(query.queryKey),
     });
-    await client.fetchQuery(seerrSearchQuery(client, api, "dune"));
-
-    expect(calls.map((call) => call.page)).toEqual([1, 1]);
-  });
-
-  test("asks again for a first page older than a minute", async () => {
-    const client = newClient();
-    const { api, calls } = fakeServer();
-    const now = jest.spyOn(Date, "now");
-
-    try {
-      now.mockReturnValue(1_000_000);
-      await client.fetchQuery(seerrFirstPageQuery(api, "dune"));
-      now.mockReturnValue(1_000_000 + SEERR_SEARCH_REUSE_MS);
-      await client.fetchQuery(seerrSearchQuery(client, api, "dune"));
-    } finally {
-      now.mockRestore();
-    }
-
-    expect(calls.map((call) => call.page)).toEqual([1, 1]);
-  });
-
-  // Fetched through the cache, the first page ran retries of its own inside
-  // Discover's: four times as many tries before a Seerr that is down showed.
-  test("asks a failing Seerr once for each try of Discover's search", async () => {
-    const client = newClient({ retry: 1, retryDelay: 0 });
-    let tries = 0;
-    const api = {
-      axios: { defaults: {} },
-      search: async () => {
-        tries += 1;
-        throw new Error("Seerr is down");
-      },
-    };
-
-    await expect(
-      client.fetchQuery(seerrSearchQuery(client, api, "dune")),
-    ).rejects.toThrow("Seerr is down");
-    expect(tries).toBe(2);
-  });
-
-  test("a first page is only good for its own server", async () => {
-    const client = newClient();
-    const first = fakeServer("https://seerr-a.example.com");
-    const second = fakeServer("https://seerr-b.example.com");
-
-    await client.fetchQuery(seerrFirstPageQuery(first.api, "dune"));
-    await client.fetchQuery(seerrFirstPageQuery(second.api, "dune"));
-    await client.fetchQuery(seerrSearchQuery(client, second.api, "dune"));
-
-    expect(first.calls).toHaveLength(1);
-    expect(second.calls).toHaveLength(1);
-  });
-
-  test("a first page is only good for its own text", async () => {
-    const client = newClient();
-    const { api, calls } = fakeServer();
-
     await client.fetchQuery(seerrFirstPageQuery(api, "dune"));
-    await client.fetchQuery(seerrSearchQuery(client, api, "dun"));
 
-    expect(calls.map((call) => call.query)).toEqual(["dune", "dun"]);
+    expect(calls.map((call) => call.page)).toEqual([1, 1]);
   });
 });
 
