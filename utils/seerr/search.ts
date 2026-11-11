@@ -1,3 +1,4 @@
+import { queryOptions } from "@tanstack/react-query";
 import { uniqBy } from "lodash";
 import { SEERR_SEARCH_PAGES } from "@/constants/Seerr";
 import type { SeerrApi } from "@/hooks/useSeerr";
@@ -65,6 +66,36 @@ export const searchSeerr = async (
     (result) => `${result.mediaType}:${result.id}`,
   );
 };
+
+/** A Seerr client as far as searching goes: its search, and its address. */
+export type SeerrSearchApi = Pick<SeerrApi, "search"> & {
+  axios: { defaults: { baseURL?: string } };
+};
+
+/**
+ * Seerr's first pages for a text (searchSeerr), on one server. The address is
+ * in the key because a server the plugin points the app at instead keeps the
+ * session and the cache: nothing clears them, and the old server's results
+ * would answer for the new one.
+ */
+export const seerrSearchKey = (
+  api: SeerrSearchApi | undefined,
+  query: string,
+) =>
+  ["search", "seerr", "results", api?.axios.defaults.baseURL, query] as const;
+
+/**
+ * Discover's search, one query for it on the phone (SeerrIndexPage) and on
+ * the TV (the search page) alike.
+ */
+export const seerrSearchQuery = (
+  api: SeerrSearchApi | undefined,
+  query: string,
+) =>
+  queryOptions({
+    queryKey: seerrSearchKey(api, query),
+    queryFn: () => searchSeerr(api, query),
+  });
 
 /**
  * The page to ask for after `last` in a list Seerr gives a page at a time,
