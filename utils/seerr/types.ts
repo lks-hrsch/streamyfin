@@ -276,6 +276,16 @@ type CombinedCreditBody = Body<
 export type CombinedCredit = Omit<CombinedCreditBody, "cast"> & {
   cast?: PersonCreditCast[];
 };
+/**
+ * A TMDB collection and its films. See CORRECTIONS["GET /collection/{collectionId}"]:
+ * upstream's `mapCollection` builds each part with the `mapMovieResult`
+ * Discover's films come from, so a part is the corrected MovieResult, the
+ * library's whole view of the film included.
+ */
+export type CollectionDetails = Always<
+  Omit<Schemas["Collection"], "parts"> & { parts?: MovieResult[] },
+  SentKeys<"CollectionDetails">
+>;
 export type GenreSliderItem = Always<
   Body<paths["/discover/genreslider/movie"]["get"]>[number],
   SentKeys<"GenreSliderItem">
