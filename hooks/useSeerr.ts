@@ -30,11 +30,16 @@ import {
   yearOf,
 } from "@/utils/seerr/media";
 import { isSeerrQuery, touchedByRequest } from "@/utils/seerr/queries";
-import { endsSeerrSession, sendSeerrRequest } from "@/utils/seerr/requestFlow";
+import {
+  endsSeerrSession,
+  type NothingRequested,
+  sendSeerrRequest,
+} from "@/utils/seerr/requestFlow";
 import { seerrQueryString } from "@/utils/seerr/search";
 import { rememberSeerrSession } from "@/utils/seerr/session";
 import { genresOf, slidersOf } from "@/utils/seerr/sliders";
 import type {
+  CollectionDetails,
   CombinedCredit,
   DiscoverSlider,
   GenreSliderItem,
@@ -94,6 +99,7 @@ export enum Endpoints {
   MEDIA = "/media",
   PERSON = "/person",
   COMBINED_CREDITS = "/combined_credits",
+  COLLECTION = "/collection",
   MOVIE = "/movie",
   RATINGS = "/ratings",
   ISSUE = "/issue",
@@ -418,13 +424,18 @@ export class SeerrApi {
       .then(({ data }) => data);
   }
 
-  async request(request: MediaRequestBody): Promise<MediaRequest> {
+  async request(
+    request: MediaRequestBody,
+  ): Promise<MediaRequest | NothingRequested> {
     const body =
       this.apiKey && this.actAsUserId != null && request.userId == null
         ? { ...request, userId: this.actAsUserId }
         : request;
     return this.axios
-      ?.post<MediaRequest>(Endpoints.API_V1 + Endpoints.REQUEST, body)
+      ?.post<MediaRequest | NothingRequested>(
+        Endpoints.API_V1 + Endpoints.REQUEST,
+        body,
+      )
       .then(({ data }) => data);
   }
 
@@ -506,6 +517,15 @@ export class SeerrApi {
       });
   }
 
+  /** A TMDB collection's films, each with where the library stands on it. */
+  async collectionDetails(id: number): Promise<CollectionDetails> {
+    return this.axios
+      ?.get<CollectionDetails>(
+        `${Endpoints.API_V1}${Endpoints.COLLECTION}/${id}`,
+      )
+      .then(({ data }) => data);
+  }
+
   async movieRatings(id: number) {
     return this.axios
       ?.get<RTRating>(
@@ -581,12 +601,24 @@ export class SeerrApi {
     );
   }
 
-  async submitIssue(mediaId: number, issueType: IssueType, message: string) {
+  async submitIssue(
+    mediaId: number,
+    issueType: IssueType,
+    message: string,
+    problem?: { season?: number; episode?: number },
+  ) {
     return this.axios
       ?.post<Issue>(Endpoints.API_V1 + Endpoints.ISSUE, {
         mediaId,
         issueType,
         message,
+        // Seerr stores and shows the affected season and episode, and its own
+        // web app sends them, though its OpenAPI body declares neither. Left
+        // out when absent, so a movie or a whole series posts as before.
+        ...(problem?.season !== undefined && { problemSeason: problem.season }),
+        ...(problem?.episode !== undefined && {
+          problemEpisode: problem.episode,
+        }),
       })
       .then((response) => {
         const issue = response.data;

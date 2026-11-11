@@ -15,8 +15,20 @@ const refusalMessage = (error: unknown): string | undefined => {
   return typeof data?.message === "string" ? data.message : undefined;
 };
 
-const outcomeOf = (request: MediaRequest): RequestOutcome => {
-  switch (request.status) {
+/**
+ * Seerr's answer to a request that filed nothing: 202 with a message ("No
+ * seasons available to request") when every season asked for holds a request
+ * already, which a view out of date can still offer. The spec documents 201.
+ */
+export interface NothingRequested {
+  message?: string;
+}
+
+const outcomeOf = (answer: MediaRequest | NothingRequested): RequestOutcome => {
+  if (!("status" in answer)) {
+    return { kind: "refused", message: answer.message };
+  }
+  switch (answer.status) {
     case MediaRequestStatus.DECLINED:
       return { kind: "declined" };
     case MediaRequestStatus.FAILED:
@@ -47,7 +59,7 @@ export const sendSeerrRequest = async ({
 }: {
   /** What tells this request from another, such as its body. */
   key: string;
-  send: () => Promise<MediaRequest>;
+  send: () => Promise<MediaRequest | NothingRequested>;
   refresh: () => Promise<unknown>;
   onOutcome: (outcome: RequestOutcome) => void;
 }): Promise<void> => {

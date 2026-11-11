@@ -9,7 +9,8 @@ export const isSeerrQuery = (queryKey: readonly unknown[]): boolean =>
  * The Seerr queries a request, an approval or a decline changes whatever the
  * title: the recent requests and each request card, the quota a request
  * spends, and the pages of posters whose status icons move (Discover's rows,
- * a genre's, a studio's or a network's titles, a person's roles).
+ * a genre's, a studio's or a network's titles, a person's roles, the films a
+ * library collection is missing).
  */
 const TOUCHED_KINDS = [
   "recent_requests",
@@ -19,6 +20,7 @@ const TOUCHED_KINDS = [
   "genre",
   "company",
   "person",
+  "collection",
 ];
 
 /**

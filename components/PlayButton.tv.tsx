@@ -20,10 +20,12 @@ import type { ThemeColors } from "@/hooks/useImageColorsReturn";
 import { itemThemeColorAtom } from "@/utils/atoms/primaryColor";
 import { shuffleQueueAtom } from "@/utils/atoms/shuffleQueue";
 import { runtimeTicksToMinutes } from "@/utils/time";
-import type { Button } from "./Button";
 import type { SelectedOptions } from "./ItemContent";
 
-interface Props extends React.ComponentProps<typeof Button> {
+// Typed against what this component actually renders (a TouchableOpacity),
+// not against Button: it only ever borrowed Button's prop shape, and Button now
+// builds on Gesture Handler's Pressable, whose event types differ.
+interface Props extends React.ComponentProps<typeof TouchableOpacity> {
   item: BaseItemDto;
   selectedOptions: SelectedOptions;
   colors?: ThemeColors;

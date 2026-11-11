@@ -42,6 +42,7 @@ cadence meant knowing both existed, and nothing would have failed if only one ha
 | `constants/Music.ts` | Music player policy: the volume normalization modes, their default, and the gain ceiling; the storage key of the stored tracks index |
 | `constants/Streamystats.ts` | Streamystats server: how long a watchlists request waits for an answer, and how many times a refresh behind lists already shown is retried |
 | `constants/Search.ts` | Library search: results asked for per section, the person types the People section leaves out, a studio page's size |
+| `constants/SeerrLibrarySearch.ts` | Seerr's search under the library's results: how long its first page is reused before Seerr is asked again, and how many of the library's titles it is checked against |
 | `constants/Inactivity.ts` | The TV inactivity sign-out's storage key for the last activity |
 | `constants/StillWatching.ts` | The "Still watching?" presets, jellyfin-web 12's episode counts and session minutes |
 | `constants/Sentry.ts` | Error reporting policy: which builds report, the per session dedupe cap, the failure storm window |
@@ -53,6 +54,7 @@ cadence meant knowing both existed, and nothing would have failed if only one ha
 | `constants/Notifications.ts` | Push notifications: the plugin route a device registers at and is deleted from on sign out |
 | `constants/QuickConnect.ts` | Quick Connect: how long a code stays valid, the wait between two polls of it, and how long one request may take |
 | `constants/QueryPersistence.ts` | The query cache written to disk: which query key families are kept, and how many pages of an infinite query |
+| `constants/Downloads.ts` | Downloads: the transcoded size estimate and the names of the files a download writes |
 | `constants/Cast.ts` | Official Jellyfin Cast receiver: its session client name, the name it gets for a TV whose own name it cannot take, how long a cast waits for the TV to start, how many times its channel is tried, and the window and waits used to tell a stopped receiver from a live one |
 
 Add a new domain file when a group grows its own identity (playback, downloads,

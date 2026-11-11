@@ -13,6 +13,7 @@
  */
 export const OFFICIAL_APPLICATION_IDS: readonly string[] = [
   "com.fredrikburmester.streamyfin",
+  "de.lkshrsch.streamyfin",
 ];
 
 /**

@@ -664,6 +664,8 @@
     "downloads": {
       "downloads_title": "Downloads",
       "transcoding": "Transcoding",
+      "paused_waiting_for_connection": "Paused, waiting for the connection",
+      "resume_download": "Resume download",
       "series": "Series",
       "movies": "Movies",
       "other_media": "Other media",
@@ -973,6 +975,14 @@
     "open": "Open chapters",
     "close": "Close chapters"
   },
+  "person_profile": {
+    "born": "Born {{date}}",
+    "born_in": "Born {{date}} in {{place}}",
+    "age": "age {{age}}",
+    "died": "Died {{date}}",
+    "died_aged": "Died {{date}}, aged {{age}}",
+    "in_library": "In library"
+  },
   "item_card": {
     "next_up": "Next up",
     "no_items_to_display": "No items to display",
@@ -1048,7 +1058,6 @@
       "Narrator": "Narrator"
     },
     "technical_details": "Technical details",
-    "appeared_in": "Appeared in",
     "movies": "Movies",
     "shows": "Shows",
     "could_not_load_item": "Could not load item",
@@ -1141,10 +1150,15 @@
     "studios": "Studios",
     "network": "Network",
     "currently_streaming_on": "Currently streaming on",
+    "library_search": {
+      "not_in_your_library": "Not in your library"
+    },
     "advanced": "Advanced",
     "request_as": "Request as",
     "tags": "Tags",
     "no_tags": "No tags",
+    "destination_server": "Destination server",
+    "server_default": "{{server}} (default)",
     "quality_profile": "Quality profile",
     "root_folder": "Root folder",
     "season_all": "Season (All)",
@@ -1153,6 +1167,9 @@
     "number_episodes_one": "{{count}} episode",
     "number_episodes_other": "{{count}} episodes",
     "born": "Born",
+    "library_links": {
+      "missing_from_collection": "Missing from this collection"
+    },
     "appearances": "Appearances",
     "approve": "Approve",
     "decline": "Decline",

@@ -15,6 +15,10 @@ public enum DownloadActivityState: String, Codable, Hashable {
 #if os(iOS)
   import ActivityKit
 
+  // ActivityAttributes is unavailable on Mac Catalyst, which has no Live Activities. The shared
+  // container below stays: the Mac build declares no App Group, so it resolves to nil there and the
+  // download store falls back to the standard defaults.
+  #if !targetEnvironment(macCatalyst)
   /// Shared between two targets:
   ///   • the app, via the `BackgroundDownloader` pod (this whole `ios/` dir is `source_files`)
   ///   • the `StreamyfinDownloadActivity` widget extension, which `plugins/withDownloadLiveActivity.ts`
@@ -100,6 +104,8 @@ public enum DownloadActivityState: String, Codable, Hashable {
       labels[state.rawValue] ?? ""
     }
   }
+
+  #endif
 
   /// Resolves the App Group container both targets share. The identifier is written into each
   /// target's Info.plist by `plugins/withDownloadLiveActivity.ts`, mirroring how

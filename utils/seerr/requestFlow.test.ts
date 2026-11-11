@@ -70,6 +70,23 @@ describe("sendSeerrRequest", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  // Asked only for seasons it holds a request for already, Seerr files
+  // nothing and answers 202 with a message instead of a request.
+  test("tells of a request Seerr filed nothing for, with its reason", async () => {
+    const outcomes: unknown[] = [];
+    const refresh = jest.fn(async () => {});
+    await sendSeerrRequest({
+      key: "tv-1399-3",
+      send: async () => ({ message: "No seasons available to request" }),
+      refresh,
+      onOutcome: (outcome) => outcomes.push(outcome),
+    });
+    expect(outcomes).toEqual([
+      { kind: "refused", message: "No seasons available to request" },
+    ]);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
   test("refuses without a reason when Seerr gives none", async () => {
     const outcomes: unknown[] = [];
     await sendSeerrRequest({

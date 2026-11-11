@@ -1,6 +1,9 @@
-import { Platform, TouchableOpacity, View } from "react-native";
+import { Platform, Pressable, TouchableOpacity, View } from "react-native";
+// Aliased: the SwiftUI destructure below also declares a Text.
+import { Text as AppText } from "@/components/common/Text";
 import { Tag } from "@/components/GenreTags";
 import type { SearchType } from "@/components/search/searchFilters";
+import { Colors } from "@/constants/Colors";
 import { SEARCH_TAB_ROW_HEIGHT } from "@/constants/Values";
 
 // @expo/ui's SwiftUI native module (ExpoUI) does not exist in tvOS builds.
@@ -13,6 +16,11 @@ const { buttonStyle, font } = Platform.isTV
   ? ({} as typeof import("@expo/ui/swift-ui/modifiers"))
   : (require("@expo/ui/swift-ui/modifiers") as typeof import("@expo/ui/swift-ui/modifiers"));
 
+const SEARCH_TYPE_LABELS: Record<SearchType, string> = {
+  Library: "search.library",
+  Discover: "search.discover",
+};
+
 interface SearchTabButtonsProps {
   searchType: SearchType;
   setSearchType: (type: SearchType) => void;
@@ -24,6 +32,34 @@ export const SearchTabButtons: React.FC<SearchTabButtonsProps> = ({
   setSearchType,
   t,
 }) => {
+  // SwiftUI's glass and glass-prominent button styles look the same on the
+  // Mac, so nothing showed which search type was on. Plain pills mark it.
+  if (Platform.OS === "ios" && Platform.isMacCatalyst) {
+    return (
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        {(Object.keys(SEARCH_TYPE_LABELS) as SearchType[]).map((type) => {
+          const selected = searchType === type;
+          return (
+            <Pressable
+              key={type}
+              accessibilityRole='button'
+              accessibilityState={{ selected }}
+              onPress={() => setSearchType(type)}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 999,
+                backgroundColor: selected ? Colors.primary : "#262626",
+              }}
+            >
+              <AppText>{t(SEARCH_TYPE_LABELS[type])}</AppText>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
   if (Platform.OS === "ios" && !Platform.isTV) {
     return (
       <Host style={{ height: SEARCH_TAB_ROW_HEIGHT, flex: 1 }}>

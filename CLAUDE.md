@@ -39,7 +39,8 @@ Read the relevant one before writing code in that area.
 
 Deep dives: [tv-modal-guide.md](docs/tv-modal-guide.md),
 [tv-focus-guide.md](docs/tv-focus-guide.md), [tv-discovery.md](docs/tv-discovery.md),
-[nested-modals.md](docs/nested-modals.md), [custom-headers.md](docs/custom-headers.md).
+[nested-modals.md](docs/nested-modals.md), [custom-headers.md](docs/custom-headers.md),
+[ci.md](docs/ci.md) (release pipeline, Apple builds on the self-hosted Mac).
 
 ## Learned facts
 
@@ -78,6 +79,7 @@ Native modules:
 - `thread-safe-state-for-stop-flags` | Stop flags need synchronous setter (stateQueue.sync not async)
 - `native-swiftui-view-sizing` | Need explicit frame + intrinsicContentSize override in ExpoView
 - `engine-agnostic-native-chrome` | The Android TV chrome consumes PlayerEngine; engine rides config.engine, resolvers split engine vs renderer
+- `download-failures-must-not-advance-the-queue` | An interrupted iOS download pauses in its queue slot and goes on on a network change, foreground or tap; failing through drained whole queues during VPN outages
 - `mpv-view-first-progress-tick-is-zero` | the MPV renderer emits its position cache once the duration is known; load() seeds it from startPosition, and JS player reports read resolveSessionPositionTicks, never progress.get()
 - `sentry-native-options-fail-silently` | sentry-cocoa ignores an option key it does not know, with no error; check the spelling in Options+Dictionary.swift
 - `avaudiosession-calls-block-on-the-audio-server` | every AVAudioSession setter AND getter is a synchronous XPC call that can take seconds; never on main, session changes go through PlayerAudioSession
@@ -98,6 +100,7 @@ TV platform:
 - `android-tv-modal-close-loses-focus` | a dismissed TV modal route leaves Android TV with nothing focused; the page must hand the focus back with requestTVFocus(). BlurView only tints there
 
 Build and tooling:
+- `mac-catalyst-build` | Mac app = iOS target on Catalyst (opt-in); derived MPVKit slice, Apple Silicon only, own sandbox entitlements, per-pod fixes and why
 - `eas-archive-drops-gitignored-tracked-files` | EAS uploads skip anything matching .gitignore even if tracked; re-include required assets, keep asset require() at module scope
 - `bun-test-discovery-leaks-fds` | bare `bun test` leaves ~14k fds open; child processes spawned from tests get dead stdio, so do the work in-process
 - `require-hooks-leak-across-jest-specs` | a require hook (tsx/cjs) registered from a spec stays on the Jest worker's Node loader and breaks later specs; map it to a stub
@@ -128,6 +131,11 @@ bun run prebuild:tv
 bun run ios:tv
 bun run android:tv
 
+# Mac (Mac Catalyst, Apple Silicon)
+bun run prebuild:mac
+bun run mac                  # Release build, opens the app; --debug loads JS from Metro
+bun run mac --archive        # Archive + App Store Connect export (--export-method, --upload)
+
 # Quality
 bun run typecheck            # TypeScript
 bun run check                # Biome, read only
@@ -141,6 +149,9 @@ bun run test                 # The full gate: typecheck, unit, lint, format, i18
 
 # iOS specific
 bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build errors
+
+# Apple release (fastlane, run by .github/workflows/release.yml, see docs/ci.md)
+nix develop --command fastlane ios release target:ios dry_run:true   # target:ios|tvos|mac
 ```
 
 ## Stack
@@ -170,6 +181,7 @@ bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build er
 | `packages/` | Local shims resolved by Metro |
 | `targets/` | Extra native targets (top shelf, download activity) |
 | `plugins/` | Expo config plugins |
+| `fastlane/` | Apple release lanes (build number, signing, TestFlight upload) |
 | `patches/` | Patch package overrides |
 | `augmentations/` | Type augmentations |
 | `test-utils/` | Shared test doubles: Jellyfin API, MMKV, the file system, custom headers, React Native, Reanimated, @expo/ui, drax |
@@ -302,8 +314,10 @@ import { apiAtom } from "@/utils/atoms/api";
 
 ## Platform notes
 
-- Platform checks: `Platform.isTV`, `Platform.OS === "android" | "ios"`.
+- Platform checks: `Platform.isTV`, `Platform.OS === "android" | "ios"`, and for the Mac
+  build `Platform.OS === "ios" && Platform.isMacCatalyst`.
 - TV builds use the `:tv` script suffix.
-- Some features are off on TV, notifications and Chromecast among them.
+- Some features are off on TV, notifications and Chromecast among them. On the Mac:
+  Chromecast, the camera (companion QR login) and Live Activities.
 - The rest of the TV rules, covering focus, modals, typography and lists, live in
   [docs/conventions/tv.md](docs/conventions/tv.md). Read it before touching TV code.
