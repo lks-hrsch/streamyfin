@@ -20,6 +20,7 @@ import { useTVBackPress } from "@/hooks/useTVBackPress";
 import { tvIssueModalAtom } from "@/utils/atoms/tvIssueModal";
 import { writeErrorLog } from "@/utils/log";
 import { scaleSize } from "@/utils/scaleSize";
+import { issueReport, issueSubject } from "@/utils/seerr/libraryIssue";
 import { IssueType, IssueTypeName } from "@/utils/seerr/types";
 import { store } from "@/utils/store";
 import { createSubmission } from "@/utils/submission";
@@ -32,9 +33,9 @@ const ISSUE_TYPES = [
 ];
 
 /**
- * The TV's report issue sheet, as the phone's (a title's page): the kind of
- * issue, what is wrong, and Seerr files it against the title. Like the phone,
- * it asks for both before it sends.
+ * The TV's report issue sheet, as the phone's (a Seerr title's page, or a
+ * library movie or episode): the kind of issue, what is wrong, and Seerr files
+ * it against the title. Like the phone, it asks for both before it sends.
  */
 export default function TVIssueModal() {
   const router = useRouter();
@@ -78,9 +79,10 @@ export default function TVIssueModal() {
   // the screen under it.
   const close = useCallback(() => {
     if (!submission.dismiss()) return;
+    modalState?.onClose?.();
     store.set(tvIssueModalAtom, null);
     router.back();
-  }, [router, submission]);
+  }, [router, submission, modalState]);
 
   useTVBackPress(() => {
     close();
@@ -94,8 +96,14 @@ export default function TVIssueModal() {
     if (!submission.start()) return;
     setSending(true);
     try {
+      const report = issueReport(message, modalState.episode);
       // submitIssue says "Issue submitted!" itself.
-      await seerrApi?.submitIssue(modalState.mediaId, issueType, message);
+      await seerrApi?.submitIssue(
+        modalState.mediaId,
+        issueType,
+        report.message,
+        report.problem,
+      );
       if (submission.finish()) close();
     } catch (error) {
       // The response interceptor already reports the failure with its route.
@@ -135,7 +143,7 @@ export default function TVIssueModal() {
                 marginBottom: scaleSize(16),
               }}
             >
-              {modalState.title}
+              {issueSubject(modalState.title, modalState.episode)}
             </Text>
             <Text style={[styles.label, { fontSize: typography.callout }]}>
               {t("seerr.issue_type")}

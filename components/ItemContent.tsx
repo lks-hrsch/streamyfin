@@ -23,6 +23,7 @@ import { ParallaxScrollView } from "@/components/ParallaxPage";
 import { PlayButton } from "@/components/PlayButton";
 import { PlayedStatus } from "@/components/PlayedStatus";
 import { SimilarItems } from "@/components/SimilarItems";
+import { LibraryIssueButton } from "@/components/seerr/LibraryIssueButton";
 import { CurrentSeries } from "@/components/series/CurrentSeries";
 import { SeasonEpisodesCarousel } from "@/components/series/SeasonEpisodesCarousel";
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
@@ -322,6 +323,9 @@ const ItemContentMobile: React.FC<ItemContentProps> = ({
                     colors={itemColors}
                   />
                 )}
+                {/* Last, as on the Seerr page: it opens a sheet of its own
+                    rather than playing anything. */}
+                <LibraryIssueButton item={item} leadingGap={12} />
               </View>
             ) : (
               <Text className='mb-2 text-neutral-400'>

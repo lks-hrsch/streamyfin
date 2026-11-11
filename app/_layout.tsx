@@ -14,9 +14,9 @@ import {
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import * as BackgroundTask from "expo-background-task";
 import { Image } from "expo-image";
-import { DarkTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Platform } from "react-native";
 import { GlobalModal } from "@/components/GlobalModal";
+import { OfflineProgressSync } from "@/components/OfflineProgressSync";
 import { PendingAccountSaveModal } from "@/components/PendingAccountSaveModal";
 import { SeerrAutoLogin } from "@/components/seerr/SeerrAutoLogin";
 import { SyncPlayPlaybackBridge } from "@/components/syncplay/SyncPlayPlaybackBridge";
@@ -62,7 +62,7 @@ const JellyfinCastStopReporter =
 
 import { getSessionApi } from "@jellyfin/sdk/lib/utils/api/session-api";
 import { getLocales } from "expo-localization";
-import { Stack, useSegments } from "expo-router";
+import { DarkTheme, Stack, ThemeProvider, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as TaskManager from "expo-task-manager";
 import { Provider as JotaiProvider, useAtomValue } from "jotai";
@@ -97,6 +97,10 @@ import {
   ReanimatedLogLevel,
 } from "react-native-reanimated";
 import { Toaster } from "sonner-native";
+
+// Back from a deep link lands on the tabs. Expo Router 58 dropped the
+// navigator's initialRouteName prop in favour of the layout's anchor.
+export const unstable_settings = { anchor: "(auth)/(tabs)" };
 
 // Disable strict mode warnings for reading shared values during render
 configureReanimatedLogger({
@@ -345,7 +349,7 @@ function Layout() {
                                       {JellyfinCastStopReporter && (
                                         <JellyfinCastStopReporter />
                                       )}
-                                      <Stack initialRouteName='(auth)/(tabs)'>
+                                      <Stack>
                                         <Stack.Screen
                                           name='(auth)/(tabs)'
                                           options={{
@@ -488,6 +492,7 @@ function Layout() {
                                         <PendingAccountSaveModal />
                                       )}
                                       <SeerrAutoLogin />
+                                      <OfflineProgressSync />
                                     </ThemeProvider>
                                   </IntroSheetProvider>
                                 </BottomSheetModalProvider>

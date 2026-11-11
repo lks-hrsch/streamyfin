@@ -12,6 +12,7 @@ import {
   ScrollView,
   TVFocusGuideView,
   View,
+  type ViewInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { toast } from "sonner-native";
@@ -26,14 +27,18 @@ import { TVButton } from "@/components/tv";
 import { useTVFocusAnimation } from "@/components/tv/hooks/useTVFocusAnimation";
 import { SEERR_BACKDROP_SIZE } from "@/constants/Seerr";
 import { useScaledTVTypography } from "@/constants/TVTypography";
-import { BACKGROUND_IMAGE_TRANSITION_DURATION } from "@/constants/Values";
+import { BACKGROUND_IMAGE_TRANSITION } from "@/constants/Values";
 import useRouter from "@/hooks/useAppRouter";
 import { useSeerr } from "@/hooks/useSeerr";
 import { useSeerrRequestOffer } from "@/hooks/useSeerrRequestOffer";
 import { useTVIssueModal } from "@/hooks/useTVIssueModal";
 import { useTVRequestModal } from "@/hooks/useTVRequestModal";
 import { useTVSeasonSelectModal } from "@/hooks/useTVSeasonSelectModal";
-import { hasPermission, Permission } from "@/utils/seerr/permissions";
+import {
+  canCreateIssues,
+  hasPermission,
+  Permission,
+} from "@/utils/seerr/permissions";
 import { seasonsWithStatus } from "@/utils/seerr/seasons";
 import type {
   MediaRequest,
@@ -61,7 +66,7 @@ interface TVCastCardProps {
   };
   imageProxy: (path: string, size?: string) => string;
   onPress: () => void;
-  refSetter?: (ref: View | null) => void;
+  refSetter?: (ref: ViewInstance | null) => void;
 }
 
 const TVCastCard: React.FC<TVCastCardProps> = ({
@@ -194,11 +199,12 @@ export const TVSeerrPage: React.FC = () => {
   const { showIssueModal } = useTVIssueModal();
 
   // Refs for TVFocusGuideView destinations (useState triggers re-render when set)
-  const [playButtonRef, setPlayButtonRef] = useState<View | null>(null);
-  const [firstCastCardRef, setFirstCastCardRef] = useState<View | null>(null);
-  const [firstSeasonCardRef, setFirstSeasonCardRef] = useState<View | null>(
+  const [playButtonRef, setPlayButtonRef] = useState<ViewInstance | null>(null);
+  const [firstCastCardRef, setFirstCastCardRef] = useState<ViewInstance | null>(
     null,
   );
+  const [firstSeasonCardRef, setFirstSeasonCardRef] =
+    useState<ViewInstance | null>(null);
 
   const {
     data: details,
@@ -409,6 +415,10 @@ export const TVSeerrPage: React.FC = () => {
   );
 
   const hasJellyfinMedia = !!details?.mediaInfo?.jellyfinMediaId;
+  // Only for those Seerr takes an issue from: anyone else would fill in the
+  // sheet to be refused.
+  const offersIssueReport =
+    hasJellyfinMedia && canCreateIssues(seerrUser?.permissions);
   const requestedByName =
     pendingRequest?.requestedBy?.displayName ||
     pendingRequest?.requestedBy?.username ||
@@ -448,7 +458,7 @@ export const TVSeerrPage: React.FC = () => {
             style={{ width: "100%", height: "100%" }}
             contentFit='cover'
             cachePolicy='memory-disk'
-            transition={BACKGROUND_IMAGE_TRANSITION_DURATION}
+            transition={BACKGROUND_IMAGE_TRANSITION}
           />
         ) : (
           <View style={{ flex: 1, backgroundColor: "#1a1a1a" }} />
@@ -684,7 +694,7 @@ export const TVSeerrPage: React.FC = () => {
 
               {/* Report an issue in Seerr's yellow, as on the phone, shaped
                   like the buttons beside it. */}
-              {hasJellyfinMedia && details?.mediaInfo?.id !== undefined && (
+              {offersIssueReport && details?.mediaInfo?.id !== undefined && (
                 <TVButton
                   variant='warning'
                   onPress={() =>

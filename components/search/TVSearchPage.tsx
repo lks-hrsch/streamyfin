@@ -24,6 +24,7 @@ import {
   type TVSearchSortButtons,
   TVSearchTabBadges,
 } from "./TVSearchTabBadges";
+import { TVSeerrLibrarySearchRow } from "./TVSeerrLibrarySearchRow";
 import { TVSeerrSearchResults } from "./TVSeerrSearchResults";
 
 const TOP_PADDING = 100;
@@ -135,6 +136,9 @@ interface TVSearchPageProps {
   onSeerrMoviePress?: (item: MovieResult) => void;
   onSeerrTvPress?: (item: TvResult) => void;
   onSeerrPersonPress?: (item: PersonResult) => void;
+  // What Seerr could add, listed after the library's results
+  seerrNotInLibrary?: (MovieResult | TvResult)[];
+  onSeerrResultPress: (item: MovieResult | TvResult) => void;
   // Discover sliders for empty state
   discoverSliders?: DiscoverSlider[];
 }
@@ -168,6 +172,8 @@ export const TVSearchPage: React.FC<TVSearchPageProps> = ({
   onSeerrMoviePress,
   onSeerrTvPress,
   onSeerrPersonPress,
+  seerrNotInLibrary = [],
+  onSeerrResultPress,
   discoverSliders,
 }) => {
   const typography = useScaledTVTypography();
@@ -393,6 +399,21 @@ export const TVSearchPage: React.FC<TVSearchPageProps> = ({
             </Text>
           </View>
         )}
+
+        {/* After the library's results, and after the line saying it has
+            none: what the user could request instead. */}
+        {isLibraryMode &&
+          !loading &&
+          debouncedSearch.length > 0 &&
+          seerrNotInLibrary.length > 0 && (
+            <View style={{ marginTop: SECTION_GAP }}>
+              <TVSeerrLibrarySearchRow
+                title={t("seerr.library_search.not_in_your_library")}
+                items={seerrNotInLibrary}
+                onItemPress={onSeerrResultPress}
+              />
+            </View>
+          )}
       </ScrollView>
     </View>
   );
