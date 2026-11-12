@@ -4,7 +4,7 @@ import { useAtomValue } from "jotai";
 import type React from "react";
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { View } from "react-native";
+import { View, type ViewInstance } from "react-native";
 import { Text } from "@/components/common/Text";
 import { SeerrRequestIcon } from "@/components/seerr/SeerrRequestIcon";
 import { TVButton } from "@/components/tv/TVButton";
@@ -14,6 +14,7 @@ import { useSeerrMissingSeasons } from "@/hooks/useSeerrMissingSeasons";
 import { useTVSeasonSelectModal } from "@/hooks/useTVSeasonSelectModal";
 import { tvRequestModalAtom } from "@/utils/atoms/tvRequestModal";
 import { tvSeasonSelectModalAtom } from "@/utils/atoms/tvSeasonSelectModal";
+import { requestTVFocus } from "@/utils/requestTVFocus";
 import { scaleSize } from "@/utils/scaleSize";
 import {
   type MissingSeason,
@@ -28,8 +29,6 @@ const NO_BADGE_COLOR = "rgba(255,255,255,0.2)";
 // focus back, as the library toolbar waits (TVLibraryToolbar).
 const FOCUS_RESTORE_DELAY_MS = 300;
 
-type FocusableView = View & { requestTVFocus?: () => void };
-
 /**
  * The Seerr side of a series' TV page: the seasons Seerr does not report as
  * available, and the TV's season request sheet to ask for them, opened as the
@@ -39,7 +38,7 @@ export const useTVSeerrMissingSeasons = (
   item: BaseItemDto | undefined,
   episodes: BaseItemDto[] | undefined,
   /** Where the focus goes back to when the request button is gone. */
-  fallbackFocus: View | null,
+  fallbackFocus: ViewInstance | null,
 ) => {
   const {
     details,
@@ -59,7 +58,7 @@ export const useTVSeerrMissingSeasons = (
   const requestSheet = useAtomValue(tvRequestModalAtom);
   const sheetOpen = seasonSheet !== null || requestSheet !== null;
   const opened = useRef(false);
-  const buttonRef = useRef<View | null>(null);
+  const buttonRef = useRef<ViewInstance | null>(null);
   const fallbackRef = useRef(fallbackFocus);
   fallbackRef.current = fallbackFocus;
 
@@ -67,16 +66,13 @@ export const useTVSeerrMissingSeasons = (
     if (sheetOpen || !opened.current) return;
     opened.current = false;
     const timer = setTimeout(
-      () =>
-        (
-          (buttonRef.current ?? fallbackRef.current) as FocusableView | null
-        )?.requestTVFocus?.(),
+      () => requestTVFocus(buttonRef.current ?? fallbackRef.current),
       FOCUS_RESTORE_DELAY_MS,
     );
     return () => clearTimeout(timer);
   }, [sheetOpen]);
 
-  const setButtonRef = useCallback((ref: View | null) => {
+  const setButtonRef = useCallback((ref: ViewInstance | null) => {
     buttonRef.current = ref;
   }, []);
 
@@ -114,7 +110,7 @@ export const useTVSeerrMissingSeasons = (
 export const TVSeerrRequestSeasonsButton: React.FC<{
   onPress: () => void;
   disabled?: boolean;
-  refSetter?: (ref: View | null) => void;
+  refSetter?: (ref: ViewInstance | null) => void;
 }> = ({ onPress, disabled, refSetter }) => {
   const typography = useScaledTVTypography();
   const { t } = useTranslation();

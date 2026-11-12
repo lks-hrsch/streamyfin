@@ -2,7 +2,7 @@ import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { act, renderHook } from "@testing-library/react-native";
 import { Provider } from "jotai";
 import type React from "react";
-import type { View } from "react-native";
+import type { ViewInstance } from "react-native";
 import { tvRequestModalAtom } from "@/utils/atoms/tvRequestModal";
 import {
   type TVSeasonSelectModalState,
@@ -69,7 +69,10 @@ jest.mock("@/hooks/useTVSeasonSelectModal", () => {
 /** A view that records being asked for the focus. */
 const focusable = () => {
   const requestTVFocus = jest.fn();
-  return { view: { requestTVFocus } as unknown as View, requestTVFocus };
+  return {
+    view: { requestTVFocus } as unknown as ViewInstance,
+    requestTVFocus,
+  };
 };
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -83,7 +86,7 @@ const episode = (season: number): BaseItemDto => ({
 });
 
 const setup = async (
-  fallback: View | null,
+  fallback: ViewInstance | null,
   // No default: "not known yet" is what one test passes.
   episodes: BaseItemDto[] | undefined,
 ) => {
