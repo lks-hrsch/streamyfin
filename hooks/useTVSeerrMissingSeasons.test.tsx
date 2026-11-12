@@ -10,7 +10,7 @@ import {
 } from "@/utils/atoms/tvSeasonSelectModal";
 import { MediaStatus, type TvDetails } from "@/utils/seerr/types";
 import { store } from "@/utils/store";
-import { useTVSeerrMissingSeasons } from "./TVSeerrMissingSeasons";
+import { useTVSeerrMissingSeasons } from "./useTVSeerrMissingSeasons";
 
 // Seerr knows the series, with its first season available. The list, what is
 // held and what is offered are worked out for real from there.
@@ -46,11 +46,6 @@ jest.mock("@/hooks/useSeerr", () => {
 });
 jest.mock("@/hooks/useSeerrPublicSettings", () => ({
   useSeerrPublicSettings: () => undefined,
-}));
-// The button is the focus engine's business; the hook hands focus to refs.
-jest.mock("@/components/tv/TVButton", () => ({ TVButton: () => null }));
-jest.mock("@/constants/TVTypography", () => ({
-  useScaledTVTypography: () => ({ callout: 18 }),
 }));
 // Opening the sheet is setting its atom: the route itself is not under test.
 jest.mock("@/hooks/useTVSeasonSelectModal", () => {

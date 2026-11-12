@@ -31,7 +31,6 @@ import { TVEpisodeList } from "@/components/series/TVEpisodeList";
 import {
   TVSeerrMissingSeasons,
   TVSeerrRequestSeasonsButton,
-  useTVSeerrMissingSeasons,
 } from "@/components/series/TVSeerrMissingSeasons";
 import { TVSeriesHeader } from "@/components/series/TVSeriesHeader";
 import { TVSimilarItems } from "@/components/TVSimilarItems";
@@ -43,6 +42,7 @@ import useRouter from "@/hooks/useAppRouter";
 import { useShuffleQueue } from "@/hooks/useShuffleQueue";
 import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
 import { useTVOptionModal } from "@/hooks/useTVOptionModal";
+import { useTVSeerrMissingSeasons } from "@/hooks/useTVSeerrMissingSeasons";
 import { useTVSeriesSeasonModal } from "@/hooks/useTVSeriesSeasonModal";
 import { useTVThemeMusic } from "@/hooks/useTVThemeMusic";
 import { useDownload } from "@/providers/DownloadProvider";
