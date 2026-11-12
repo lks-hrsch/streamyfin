@@ -21,7 +21,7 @@ bun run perf
 
 The target comes from `gh pr view`, the same fact CI uses. Without a PR it falls back to `develop`, looked up on `upstream` before `origin`. A branch stacked on another one should name its parent, so the parent's gains don't count as yours. The script prints the base it chose.
 
-The baseline is measured with the scenario files and `test-utils/` doubles your branch added or changed copied onto the base, so a new scenario has a baseline in the same PR that adds it, and a changed one is compared as the same test. A scenario that needs code only your branch has can't run on the base; it is reported and left without a baseline.
+The baseline is measured with the scenario files and `test-utils/` doubles your branch added or changed copied onto the base, so a new scenario has a baseline in the same PR that adds it, and a changed one is compared as the same test. A scenario that needs code only your branch has can't run on the base. The base is then measured with its own scenarios and doubles, as if nothing had been copied, and the PR comment says so: its numbers can move with your changes to the scenarios as well as with the code.
 
 The comparison is written to `.reassure/output.md`. The `.reassure/` folder is gitignored.
 

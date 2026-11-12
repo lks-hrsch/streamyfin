@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -15,6 +16,7 @@ import {
   currentCheckout,
   hasTrackedChanges,
   isScenarioFile,
+  OWN_SCENARIOS_NOTE,
 } from "./reassure-baseline";
 
 // Throwaway commits: never call the developer's signer (a global
@@ -236,5 +238,20 @@ process.exit(failed ? 1 : 0);
     ).toContain("home.perf-test.ts");
     expect(git("symbolic-ref", "--short", "HEAD")).toBe("feature");
     expect(git("status", "--porcelain", "--untracked-files=no")).toBe("");
+    // For the PR comment, which said nothing of it: only the log did.
+    expect(readFileSync(join(repo, OWN_SCENARIOS_NOTE), "utf8").trim()).toBe(
+      git("rev-parse", "main"),
+    );
+  });
+
+  it("drops an earlier note when the branch's scenarios run on the base", () => {
+    write("home.perf-test.ts", "// home scenario, changed\n");
+    git("commit", "-qam", "change the scenario");
+    mkdirSync(join(repo, ".reassure"));
+    write(OWN_SCENARIOS_NOTE, `${git("rev-parse", "main")}\n`);
+
+    measureBase();
+
+    expect(existsSync(join(repo, OWN_SCENARIOS_NOTE))).toBe(false);
   });
 });

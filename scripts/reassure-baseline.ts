@@ -12,7 +12,8 @@
  * Reassure then keeps no baseline for any test of its file, which the report
  * would list as added instead of compared. So when the copied scenarios do not
  * all run, the base is measured again with its own scenarios, as it was before
- * this script existed, and the run says so.
+ * this script existed, and the run says so: in the log, and in
+ * `OWN_SCENARIOS_NOTE` for the PR comment.
  *
  * The base is the argument if given. Without one it is the target branch of
  * this branch's open PR (what CI measures against), else `develop`, looked up on
@@ -22,6 +23,15 @@
  * Usage: bun scripts/reassure-baseline.ts [baseRef]
  */
 import { execFileSync, spawnSync } from "node:child_process";
+import { rmSync, writeFileSync } from "node:fs";
+
+/**
+ * Written when the base was measured with its own scenarios, and holding the
+ * commit it measured. Base and PR then ran different scenarios and test
+ * doubles, so a number in the comparison can move with those as well as with
+ * the code, and the PR comment says so (`reassure-report.ts`).
+ */
+export const OWN_SCENARIOS_NOTE = ".reassure/base-own-scenarios";
 
 /** What gets copied onto the base: the scenarios and the doubles they share. */
 export const isScenarioFile = (file: string) =>
@@ -164,6 +174,9 @@ const measureBase = (baseRef: string) => {
   const head = git("rev-parse", "HEAD");
   const { copy, remove } = changedScenarioFiles(baseRef, head);
   const fromBranch = copy.length + remove.length > 0;
+  // A note from an earlier measurement would describe a baseline this one
+  // replaces.
+  rmSync(OWN_SCENARIOS_NOTE, { force: true });
   const restoreBase = () => {
     git("reset", "--hard");
     if (copy.length > 0) git("clean", "-fdq", "--", ...copy);
@@ -199,6 +212,7 @@ const measureBase = (baseRef: string) => {
       if (!run("bun", ["run", "--if-present", "perf:baseline"])) {
         throw new Error(`No baseline was measured on ${baseRef}`);
       }
+      writeFileSync(OWN_SCENARIOS_NOTE, `${git("rev-parse", "HEAD")}\n`);
     }
   } finally {
     process.off("SIGINT", ignoreInterrupt);
