@@ -5,7 +5,12 @@ import { View, type ViewInstance } from "react-native";
 import { Text } from "@/components/common/Text";
 import { SeerrRequestIcon } from "@/components/seerr/SeerrRequestIcon";
 import { TVButton } from "@/components/tv/TVButton";
-import { SeerrBadgeColors, SeerrStatusBadgeColors } from "@/constants/Colors";
+import {
+  SEERR_TV_NO_BADGE,
+  SeerrBadgeColors,
+  SeerrStatusBadgeColors,
+  TVTextColors,
+} from "@/constants/Colors";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import { scaleSize } from "@/utils/scaleSize";
 import {
@@ -16,9 +21,6 @@ import {
   seerrSeasonLabel,
   seerrSeasonStatusText,
 } from "@/utils/seerr/seasonText";
-
-// A season nobody may ask for has no badge of its own: a quiet circle.
-const NO_BADGE_COLOR = "rgba(255,255,255,0.2)";
 
 /** The button beside Play that opens the season request sheet. */
 export const TVSeerrRequestSeasonsButton: React.FC<{
@@ -37,13 +39,13 @@ export const TVSeerrRequestSeasonsButton: React.FC<{
       refSetter={refSetter}
     >
       <View style={{ marginRight: scaleSize(10) }}>
-        <SeerrRequestIcon size={scaleSize(28)} color='#FFFFFF' />
+        <SeerrRequestIcon size={scaleSize(28)} color={TVTextColors.primary} />
       </View>
       <Text
         style={{
           fontSize: typography.callout,
           fontWeight: "bold",
-          color: "#FFFFFF",
+          color: TVTextColors.primary,
         }}
       >
         {t("seerr.series_page.request_seasons")}
@@ -72,7 +74,7 @@ export const TVSeerrMissingSeasons: React.FC<{
         style={{
           fontSize: typography.callout,
           fontWeight: "600",
-          color: "rgba(255,255,255,0.7)",
+          color: TVTextColors.heading,
           marginBottom: scaleSize(12),
         }}
       >
@@ -104,16 +106,17 @@ export const TVSeerrMissingSeasons: React.FC<{
                   borderRadius: scaleSize(15),
                   alignItems: "center",
                   justifyContent: "center",
+                  // A season nobody may ask for has no badge of its own.
                   backgroundColor: badge
                     ? SeerrStatusBadgeColors[badge.tone]
-                    : NO_BADGE_COLOR,
+                    : SEERR_TV_NO_BADGE,
                 }}
               >
                 {badge && (
                   <MaterialCommunityIcons
                     name={badge.icon}
                     size={scaleSize(18)}
-                    color='white'
+                    color={TVTextColors.primary}
                   />
                 )}
               </View>
@@ -121,7 +124,7 @@ export const TVSeerrMissingSeasons: React.FC<{
                 style={{
                   fontSize: typography.callout,
                   fontWeight: "600",
-                  color: "#FFFFFF",
+                  color: TVTextColors.primary,
                 }}
               >
                 {seerrSeasonLabel(t, season.seasonNumber)}
@@ -132,7 +135,7 @@ export const TVSeerrMissingSeasons: React.FC<{
                   color:
                     season.badge === "failed"
                       ? SeerrBadgeColors.danger.border
-                      : "rgba(255,255,255,0.6)",
+                      : TVTextColors.secondary,
                 }}
               >
                 {seerrSeasonStatusText(t, season.badge)}
