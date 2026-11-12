@@ -40,6 +40,7 @@ CI does the same on every PR that touches code the scenarios can reach (the `pat
 
 - The app's real i18n, so translated strings cost what they cost in the app.
 - Fake timers, with `performance` left real. React reads its render durations from `performance.now`, so faking it would make every duration zero.
+- `react-native`'s exports resolved once per spec file. Its index calls `require()` in a getter on every read, which in Jest runs the module resolver each time, a cost a device never pays. An export still resolves on its first read, so a scenario's `jest.mock` of a `react-native` module still applies.
 - Stubs for native modules and libraries that don't run in Jest: FlashList's measurements, MMKV, Reanimated, safe area insets, the bottom sheet, device info, toasts and the app's own native modules (`@/modules`).
 - A recording router: `test-utils/expoRouter.ts` stands for `expo-router`, and its `router` holds the `push` and `replace` calls the real `useAppRouter` makes, so a scenario can assert them.
 - `@/utils/atoms/api` and a `JellyfinProvider` that re-exports it, whose `apiAtom` holds a `makeApi()` double from `test-utils/jellyfinApi.ts`, so you can answer API requests with `api.mock`.
