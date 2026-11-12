@@ -32,9 +32,11 @@ first; they are not cosmetic:
   materialized as copies; codesign calls it ambiguous. The embed script relinks the app's copy.
 - **Tab switches never reached JS** (every tab but the first stayed blank): in the Mac
   idiom the tab bar is a toolbar control; selecting there calls neither `shouldSelect`
-  delegate method react-native-bottom-tabs listens to, nor moves SwiftUI's selection
-  binding. Only `didSelectTab` fires, which `patches/react-native-bottom-tabs@1.4.0.patch`
-  forwards on Catalyst.
+  delegate method react-native-bottom-tabs listened to, nor moves SwiftUI's selection
+  binding. Only `didSelectTab` fires. Until Expo SDK 58 a patch to react-native-bottom-tabs
+  forwarded it on Catalyst. Since SDK 58 the tabs are Expo Router's `NativeTabs`, whose
+  `RNSTabBarController` (react-native-screens) handles `didSelectTab` itself, so no patch
+  is carried; confirm on a Mac build if tabs go blank again.
 - **macOS 27 requires the UIScene lifecycle** at launch. The app adopts it for every iOS
   build through `expo-build-properties` `ios.enableSceneSupport`; the Mac build must not
   declare its own `UIApplicationSceneManifest`, or that option refuses to prebuild.
@@ -75,7 +77,7 @@ first; they are not cosmetic:
   button never appears there, and the button group goes blank: present from the root instead
   (the global sheet, see `PlayInRemoteSession`). And a menu opened in a modal over a screen
   left that screen's toolbar items (back button included) missing after the modal closed,
-  until a scroll rebuilt them; `patches/react-native-screens@4.26.2.patch` re-applies the
+  until a scroll rebuilt them; `patches/react-native-screens@4.30.1.patch` re-applies the
   header config on `viewDidAppear`, Catalyst only.
 - **The toolbar draws header pills at a fixed 36pt height.** A lone glyph button came out as
   a standing capsule; `HeaderButton` pads a lone icon to that height on the Mac.

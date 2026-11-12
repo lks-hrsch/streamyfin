@@ -30,11 +30,13 @@ export interface AppRoute {
 
 /**
  * TMDB ids picked because they are old, popular and will not disappear:
- * a film, a series with many seasons, and a person with a long career.
+ * a film, a series with many seasons, a person with a long career, and a
+ * collection of films.
  */
 const DUNE = 693134;
 const GAME_OF_THRONES = 1399;
 const BRAD_PITT = 287;
+const THE_MATRIX_COLLECTION = 2344;
 
 /**
  * Stands for the id of the account the capture signs in with, for a route
@@ -97,6 +99,12 @@ export const APP_ROUTES: AppRoute[] = [
   {
     template: "GET /person/{personId}/combined_credits",
     params: { personId: BRAD_PITT },
+  },
+
+  {
+    template: "GET /collection/{collectionId}",
+    params: { collectionId: THE_MATRIX_COLLECTION },
+    note: "A library collection's missing films. Its parts carry the library's view of each film, as a film in Discover does.",
   },
 
   { template: "GET /user", query: { take: 3 } },

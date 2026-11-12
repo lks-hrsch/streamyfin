@@ -7,9 +7,11 @@ import {
   StyleSheet,
   TVFocusGuideView,
   View,
+  type ViewInstance,
 } from "react-native";
 import { Text } from "@/components/common/Text";
 import { useScaledTVTypography } from "@/constants/TVTypography";
+import { requestTVFocus } from "@/utils/requestTVFocus";
 import { scaleSize } from "@/utils/scaleSize";
 import { TVCancelButton } from "./TVCancelButton";
 import { TVOptionCard } from "./TVOptionCard";
@@ -44,7 +46,7 @@ export const TVOptionSelector = <T,>({
 }: TVOptionSelectorProps<T>) => {
   const typography = useScaledTVTypography();
   const [isReady, setIsReady] = useState(false);
-  const firstCardRef = useRef<View>(null);
+  const firstCardRef = useRef<ViewInstance>(null);
 
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sheetTranslateY = useRef(new Animated.Value(200)).current;
@@ -87,7 +89,7 @@ export const TVOptionSelector = <T,>({
   useEffect(() => {
     if (isReady && firstCardRef.current) {
       const timer = setTimeout(() => {
-        (firstCardRef.current as any)?.requestTVFocus?.();
+        requestTVFocus(firstCardRef.current);
       }, 50);
       return () => clearTimeout(timer);
     }

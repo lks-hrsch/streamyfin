@@ -1,4 +1,9 @@
-import { canSeeRecentlyAdded, hasPermission, Permission } from "./permissions";
+import {
+  canCreateIssues,
+  canSeeRecentlyAdded,
+  hasPermission,
+  Permission,
+} from "./permissions";
 
 describe("hasPermission", () => {
   test("lets an administrator through whatever is asked", () => {
@@ -68,5 +73,28 @@ describe("canSeeRecentlyAdded", () => {
   test("hides it from someone who may only request", () => {
     expect(canSeeRecentlyAdded(Permission.REQUEST)).toBe(false);
     expect(canSeeRecentlyAdded(0)).toBe(false);
+  });
+});
+
+// Seerr's own rule for POST /issue: either permission will do. The Seerr
+// page offered its report button to everyone, and anyone else filled in the
+// sheet to be refused with a 403.
+describe("canCreateIssues", () => {
+  test("takes an issue from those who may create or manage issues", () => {
+    expect(canCreateIssues(Permission.CREATE_ISSUES)).toBe(true);
+    expect(canCreateIssues(Permission.MANAGE_ISSUES)).toBe(true);
+    expect(canCreateIssues(Permission.ADMIN)).toBe(true);
+    expect(canCreateIssues(Permission.REQUEST | Permission.CREATE_ISSUES)).toBe(
+      true,
+    );
+  });
+
+  test("refuses everyone else", () => {
+    expect(canCreateIssues(Permission.REQUEST | Permission.VIEW_ISSUES)).toBe(
+      false,
+    );
+    expect(canCreateIssues(Permission.NONE)).toBe(false);
+    // No Seerr user signed in.
+    expect(canCreateIssues(undefined)).toBe(false);
   });
 });
