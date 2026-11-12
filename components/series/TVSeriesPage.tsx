@@ -25,13 +25,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ItemImage } from "@/components/common/ItemImage";
 import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
-import { episodeRowState } from "@/components/series/episodeRowState";
-import { seasonIndexAtom } from "@/components/series/SeasonPicker";
-import { TVEpisodeList } from "@/components/series/TVEpisodeList";
 import {
   TVSeerrMissingSeasons,
   TVSeerrRequestSeasonsButton,
-} from "@/components/series/TVSeerrMissingSeasons";
+} from "@/components/seerr/tv/TVSeerrMissingSeasons";
+import { episodeRowState } from "@/components/series/episodeRowState";
+import { seasonIndexAtom } from "@/components/series/SeasonPicker";
+import { TVEpisodeList } from "@/components/series/TVEpisodeList";
 import { TVSeriesHeader } from "@/components/series/TVSeriesHeader";
 import { TVSimilarItems } from "@/components/TVSimilarItems";
 import { TVButton } from "@/components/tv/TVButton";

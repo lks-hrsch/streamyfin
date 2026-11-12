@@ -16,12 +16,12 @@ import { Image } from "@/components/common/ServerImage";
 import { DownloadItems } from "@/components/DownloadItem";
 import { ParallaxScrollView } from "@/components/ParallaxPage";
 import { SimilarItems } from "@/components/SimilarItems";
+import { SeerrMissingSeasons } from "@/components/seerr/SeerrMissingSeasons";
 import { NextUp } from "@/components/series/NextUp";
 import {
   SeasonPicker,
   seasonIndexAtom,
 } from "@/components/series/SeasonPicker";
-import { SeerrMissingSeasons } from "@/components/series/SeerrMissingSeasons";
 import { SeriesHeader } from "@/components/series/SeriesHeader";
 import { TVSeriesPage } from "@/components/series/TVSeriesPage";
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
