@@ -65,7 +65,6 @@ const HORIZONTAL_PADDING = scaleSize(80);
 const TOP_PADDING = scaleSize(140);
 const POSTER_WIDTH_PERCENT = 0.22;
 const SCALE_PADDING = scaleSize(20);
-const NO_EPISODES: BaseItemDto[] = [];
 
 interface TVSeriesPageProps {
   item: BaseItemDto;
@@ -77,13 +76,14 @@ interface TVSeriesPageProps {
 
 export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   item,
+  // The episodes as given too, undefined while they load or when they could
+  // not: Seerr's list waits for them rather than taking none for an empty
+  // library.
   allEpisodes: knownEpisodes,
+  allEpisodes = [],
   isLoading: _isLoading,
   initialSeasonIndex,
 }) => {
-  // Undefined while the episodes load, or when they could not: Seerr's list
-  // waits for them rather than taking none for an empty library.
-  const allEpisodes = knownEpisodes ?? NO_EPISODES;
   const typography = useScaledTVTypography();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
