@@ -28,6 +28,7 @@ import { getItemNavigation } from "@/components/common/TouchableItemRouter";
 import { episodeRowState } from "@/components/series/episodeRowState";
 import { seasonIndexAtom } from "@/components/series/SeasonPicker";
 import { TVEpisodeList } from "@/components/series/TVEpisodeList";
+import { TVSeriesCast } from "@/components/series/TVSeriesCast";
 import { TVSeriesHeader } from "@/components/series/TVSeriesHeader";
 import { TVSimilarItems } from "@/components/TVSimilarItems";
 import { TVButton } from "@/components/tv/TVButton";
@@ -72,7 +73,7 @@ interface TVSeriesPageProps {
 export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   item,
   allEpisodes = [],
-  isLoading: _isLoading,
+  isLoading,
   initialSeasonIndex,
 }) => {
   const typography = useScaledTVTypography();
@@ -605,6 +606,19 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
             horizontalPadding={HORIZONTAL_PADDING}
           />
         </View>
+
+        {/* The cast, as movies and episodes have it. Mounted once the
+            series' episodes are in, so its request goes out after the
+            page's own. Offline it draws nothing. */}
+        {!isLoading && (
+          <TVSeriesCast
+            item={item}
+            onPersonPress={handlePersonPress}
+            disabled={isSeasonModalVisible}
+            horizontalPadding={HORIZONTAL_PADDING}
+            titleInset={SCALE_PADDING}
+          />
+        )}
 
         {/* Credits lines - creators, directors, writers */}
         <TVCastCrewText
