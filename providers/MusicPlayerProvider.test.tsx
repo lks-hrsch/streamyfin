@@ -9,7 +9,11 @@ import { isExpectedError } from "@/utils/errors";
 import { logAndCaptureError } from "@/utils/log";
 import { storage } from "@/utils/mmkv";
 import { enterVideoSession } from "@/utils/videoSession";
-import { MusicPlayerProvider, useMusicPlayer } from "./MusicPlayerProvider";
+import {
+  MusicPlayerProvider,
+  useMusicPlayer,
+  useMusicPlayerTrack,
+} from "./MusicPlayerProvider";
 
 interface NativeTrack {
   id: string;
@@ -1337,5 +1341,119 @@ describe("MusicPlayerProvider native player setup", () => {
 
     expect(nativeIds()).toEqual([]);
     expect(player.currentTrack).toBeNull();
+  });
+});
+
+const STOPPED_URL = "https://jellyfin.example.com/Sessions/Playing/Stopped";
+
+describe("MusicPlayerProvider stop report of a new start", () => {
+  /** Plays the track on to `seconds`, the way the playback engine reports it. */
+  const playTo = async (seconds: number) => {
+    for (let second = 1; second <= seconds; second++) {
+      await act(async () => player.setProgress(second));
+    }
+  };
+
+  // A track row keeps the playTrack it rendered with while the track plays
+  // on: the rows no longer re-render on every progress update. The stop
+  // report of the track the tap replaces must still carry where it got to,
+  // not where it was when the row last rendered.
+  test("playTrack from before the last progress updates reports the position reached", async () => {
+    await startPlaying();
+    const { playTrack } = player;
+
+    await playTo(42);
+    await run(() => playTrack(track("next")));
+
+    expect(reports(STOPPED_URL)).toEqual([
+      expect.objectContaining({
+        ItemId: "track-1",
+        PositionTicks: 42 * 10_000_000,
+      }),
+    ]);
+  });
+
+  // Album, playlist and artist pages hold playQueue the same way.
+  test("playQueue from before the last progress updates reports the position reached", async () => {
+    await startPlaying();
+    const { playQueue } = player;
+
+    await playTo(42);
+    await run(() => playQueue(ALBUM, 0));
+
+    expect(reports(STOPPED_URL)).toEqual([
+      expect.objectContaining({
+        ItemId: "track-1",
+        PositionTicks: 42 * 10_000_000,
+      }),
+    ]);
+  });
+
+  test("a start after a seek reports the position sought to", async () => {
+    await startPlaying();
+    const { playTrack } = player;
+
+    await playTo(5);
+    await run((p) => p.seek(120));
+    await run(() => playTrack(track("next")));
+
+    expect(reports(STOPPED_URL)).toEqual([
+      expect.objectContaining({
+        ItemId: "track-1",
+        PositionTicks: 120 * 10_000_000,
+      }),
+    ]);
+  });
+});
+
+describe("useMusicPlayerTrack", () => {
+  type TrackContext = ReturnType<typeof useMusicPlayerTrack>;
+  let values: TrackContext[];
+
+  const TrackProbe = () => {
+    values.push(useMusicPlayerTrack());
+    return null;
+  };
+
+  const mountWithTrackProbe = async () => {
+    values = [];
+    await render(
+      <MusicPlayerProvider>
+        <Probe />
+        <TrackProbe />
+      </MusicPlayerProvider>,
+    );
+    await settle();
+  };
+
+  const last = () => values[values.length - 1];
+
+  // Track rows and the album, playlist and artist pages read it. A value that
+  // changed with the position re-rendered all of them every second.
+  test("a progress update leaves its readers alone", async () => {
+    await mountWithTrackProbe();
+    await act(async () => player.playQueue([TRACK]));
+    await waitFor(() => expect(last().currentTrack?.Id).toBe("track-1"));
+    const before = values.length;
+
+    for (let second = 1; second <= 5; second++) {
+      await act(async () => player.setProgress(second));
+    }
+
+    expect(values).toHaveLength(before);
+  });
+
+  test("a pause reaches its readers, and keeps the start callbacks", async () => {
+    await mountWithTrackProbe();
+    await act(async () => player.playQueue([TRACK]));
+    await waitFor(() => expect(last().isPlaying).toBe(true));
+    const playing = last();
+
+    await act(async () => player.setIsPlaying(false));
+
+    expect(last().isPlaying).toBe(false);
+    expect(last().currentTrack?.Id).toBe("track-1");
+    expect(last().playTrack).toBe(playing.playTrack);
+    expect(last().playQueue).toBe(playing.playQueue);
   });
 });
