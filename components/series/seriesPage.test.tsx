@@ -62,6 +62,22 @@ jest.mock("@/components/series/SeriesHeader", () => ({
   },
 }));
 jest.mock("@/components/series/NextUp", () => ({ NextUp: () => null }));
+// The page's missing seasons from Seerr (#20) load Seerr's client and request
+// sheet, whose imports reach the bottom sheet's native worklets. Without a
+// Seerr the row draws nothing, which is all this spec needs of it.
+jest.mock("@/hooks/useSeerr", () => ({
+  useSeerr: () => ({ seerrApi: undefined, seerrUser: undefined }),
+  seerrPublicSettingsQuery: () => ({
+    queryKey: ["seerr", "settings", "public"],
+    queryFn: () => null,
+    enabled: false,
+  }),
+}));
+jest.mock("@/components/seerr/RequestModal", () => ({
+  __esModule: true,
+  default: () => null,
+}));
+jest.mock("@/hooks/useHaptic", () => ({ useHaptic: () => () => {} }));
 jest.mock("@/components/series/SeasonPicker", () => ({
   SeasonPicker: () => null,
   seasonIndexAtom: jest.requireActual("jotai").atom({}),
