@@ -34,7 +34,7 @@ cadence meant knowing both existed, and nothing would have failed if only one ha
 | `constants/Images.ts` | Server image requests: the detail page logo height, and the pixel caps and steps on what is asked for |
 | `constants/TVSizes.ts` | TV poster sizes, gaps, padding, animation timings, how close to the end a growing grid asks for more, where Android TV's top tab bar ends |
 | `constants/TVTypography.ts` | TV type scale and the `useScaledTVTypography` hook |
-| `constants/TVSheet.ts` | How TV sheets come in: backdrop fade, slide, and the delays before their cards mount and take focus |
+| `constants/TVSheet.ts` | How TV sheets come in: backdrop fade, slide, and the delays before their cards mount and take focus; and how long a page waits after one closes before it takes the focus back |
 | `constants/TVPosterSizes.ts` | TV poster size keys |
 | `constants/Playback.ts` | Playback policy shared by the JS and native players (progress report cadence, next-episode countdown window, play queue size cap), how long a remote repeat or shuffle change waits to be confirmed, how often the stats overlay polls the transcode progress, how long a new native player waits for a closing one, and the query families that show watch progress |
 | `constants/Logs.ts` | App log storage key and how many entries it keeps |

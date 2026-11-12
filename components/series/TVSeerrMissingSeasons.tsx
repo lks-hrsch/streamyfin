@@ -11,10 +11,10 @@ import { TVButton } from "@/components/tv/TVButton";
 import { SeerrBadgeColors, SeerrStatusBadgeColors } from "@/constants/Colors";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import { useSeerrMissingSeasons } from "@/hooks/useSeerrMissingSeasons";
+import { useTVFocusRestore } from "@/hooks/useTVFocusRestore";
 import { useTVSeasonSelectModal } from "@/hooks/useTVSeasonSelectModal";
 import { tvRequestModalAtom } from "@/utils/atoms/tvRequestModal";
 import { tvSeasonSelectModalAtom } from "@/utils/atoms/tvSeasonSelectModal";
-import { requestTVFocus } from "@/utils/requestTVFocus";
 import { scaleSize } from "@/utils/scaleSize";
 import {
   type MissingSeason,
@@ -27,10 +27,6 @@ import {
 
 // A season nobody may ask for has no badge of its own: a quiet circle.
 const NO_BADGE_COLOR = "rgba(255,255,255,0.2)";
-
-// How long a closed sheet's route takes to leave before the page can take the
-// focus back, as the library toolbar waits (TVLibraryToolbar).
-const FOCUS_RESTORE_DELAY_MS = 300;
 
 /**
  * The Seerr side of a series' TV page: the seasons Seerr does not report as
@@ -64,16 +60,13 @@ export const useTVSeerrMissingSeasons = (
   const buttonRef = useRef<ViewInstance | null>(null);
   const fallbackRef = useRef(fallbackFocus);
   fallbackRef.current = fallbackFocus;
+  const restoreFocus = useTVFocusRestore();
 
   useEffect(() => {
     if (sheetOpen || !opened.current) return;
     opened.current = false;
-    const timer = setTimeout(
-      () => requestTVFocus(buttonRef.current ?? fallbackRef.current),
-      FOCUS_RESTORE_DELAY_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [sheetOpen]);
+    return restoreFocus(() => buttonRef.current ?? fallbackRef.current);
+  }, [sheetOpen, restoreFocus]);
 
   const setButtonRef = useCallback((ref: ViewInstance | null) => {
     buttonRef.current = ref;
