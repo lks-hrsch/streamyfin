@@ -184,7 +184,6 @@ describe("useTVSeerrMissingSeasons", () => {
         title: "A series",
         id: 1399,
         mediaType: "tv" as never,
-        onRequested: () => {},
       });
       store.set(tvSeasonSelectModalAtom, null);
     });
@@ -207,7 +206,6 @@ describe("useTVSeerrMissingSeasons", () => {
         title: "Another series",
         mediaId: 1,
         hasAdvancedRequestPermission: false,
-        onRequested: () => {},
       });
     });
     await closeSheets();

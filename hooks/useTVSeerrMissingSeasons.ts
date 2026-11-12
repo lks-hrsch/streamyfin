@@ -62,9 +62,8 @@ export const useTVSeerrMissingSeasons = (
       mediaId: details.id,
       tvdbId: details.externalIds?.tvdbId ?? undefined,
       hasAdvancedRequestPermission,
-      // The request refreshes the details itself (requestMedia), and the
-      // list with them.
-      onRequested: () => {},
+      // No onRequested: the request refreshes the details itself
+      // (requestMedia), and the list with them.
     });
   }, [
     details,

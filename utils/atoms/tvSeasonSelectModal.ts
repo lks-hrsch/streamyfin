@@ -11,7 +11,8 @@ export type TVSeasonSelectModalState = {
   mediaId: number;
   tvdbId?: number;
   hasAdvancedRequestPermission: boolean;
-  onRequested: () => void;
+  /** After a request went through, for a page that has more to refresh. */
+  onRequested?: () => void;
 } | null;
 
 export const tvSeasonSelectModalAtom = atom<TVSeasonSelectModalState>(null);

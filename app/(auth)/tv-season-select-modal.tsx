@@ -235,7 +235,7 @@ export default function TVSeasonSelectModalPage() {
     }
 
     await requestMedia(modalState.title, body, () => {
-      modalState.onRequested();
+      modalState.onRequested?.();
       if (submission.dismiss()) router.back();
     });
     // A refusal leaves the sheet open, to try again.
