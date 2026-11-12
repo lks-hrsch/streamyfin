@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import axios, { type AxiosError, type AxiosInstance } from "axios";
-import { atom, useAtomValue } from "jotai";
-import { useAtom } from "jotai/index";
-import { inRange } from "lodash";
+import { atom, useAtom, useAtomValue } from "jotai";
+import inRange from "lodash/inRange";
 import { Image } from "react-native";
 import {
   SEERR_COOKIES_STORAGE_KEY,
@@ -41,6 +40,7 @@ import { seerrQueryString } from "@/utils/seerr/search";
 import { rememberSeerrSession } from "@/utils/seerr/session";
 import { genresOf, slidersOf } from "@/utils/seerr/sliders";
 import type {
+  CollectionDetails,
   CombinedCredit,
   DiscoverSlider,
   GenreSliderItem,
@@ -80,9 +80,12 @@ interface SearchResults {
 // changed name twice (overseerr_ up to Jellyseerr 2.3, jellyseerr_ up to 2.7,
 // seerr_ since Seerr 3), and a name it does not know answers with its HTML
 // page, a broken image.
-const POSTER_PLACEHOLDER = Image.resolveAssetSource(
-  require("@/assets/images/seerr-poster-placeholder.png"),
-).uri;
+// resolveAssetSource only answers undefined for a source it cannot read, and
+// a bundled require() always resolves.
+const POSTER_PLACEHOLDER =
+  Image.resolveAssetSource(
+    require("@/assets/images/seerr-poster-placeholder.png"),
+  )?.uri ?? "";
 
 export const clearSeerrStorageData = () => {
   storage.remove(SEERR_USER_STORAGE_KEY);
@@ -97,6 +100,7 @@ export enum Endpoints {
   MEDIA = "/media",
   PERSON = "/person",
   COMBINED_CREDITS = "/combined_credits",
+  COLLECTION = "/collection",
   MOVIE = "/movie",
   RATINGS = "/ratings",
   ISSUE = "/issue",
@@ -523,6 +527,15 @@ export class SeerrApi {
       });
   }
 
+  /** A TMDB collection's films, each with where the library stands on it. */
+  async collectionDetails(id: number): Promise<CollectionDetails> {
+    return this.axios
+      ?.get<CollectionDetails>(
+        `${Endpoints.API_V1}${Endpoints.COLLECTION}/${id}`,
+      )
+      .then(({ data }) => data);
+  }
+
   async movieRatings(id: number) {
     return this.axios
       ?.get<RTRating>(
@@ -598,12 +611,24 @@ export class SeerrApi {
     );
   }
 
-  async submitIssue(mediaId: number, issueType: IssueType, message: string) {
+  async submitIssue(
+    mediaId: number,
+    issueType: IssueType,
+    message: string,
+    problem?: { season?: number; episode?: number },
+  ) {
     return this.axios
       ?.post<Issue>(Endpoints.API_V1 + Endpoints.ISSUE, {
         mediaId,
         issueType,
         message,
+        // Seerr stores and shows the affected season and episode, and its own
+        // web app sends them, though its OpenAPI body declares neither. Left
+        // out when absent, so a movie or a whole series posts as before.
+        ...(problem?.season !== undefined && { problemSeason: problem.season }),
+        ...(problem?.episode !== undefined && {
+          problemEpisode: problem.episode,
+        }),
       })
       .then((response) => {
         const issue = response.data;

@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -14,7 +15,7 @@ import {
 } from "@/components/search/searchSort";
 import Discover from "@/components/seerr/discover/Discover";
 import { useSeerr } from "@/hooks/useSeerr";
-import { searchSeerr } from "@/utils/seerr/search";
+import { seerrSearchQuery } from "@/utils/seerr/search";
 import { loadDiscoverSliders } from "@/utils/seerr/sliders";
 import type { MovieResult, PersonResult, TvResult } from "@/utils/seerr/types";
 import { MediaType } from "@/utils/seerr/types";
@@ -41,6 +42,7 @@ export const SeerrIndexPage: React.FC<Props> = ({
   order,
 }) => {
   const { seerrApi } = useSeerr();
+  const queryClient = useQueryClient();
   const opacity = useSharedValue(1);
   const { t } = useTranslation();
 
@@ -59,10 +61,8 @@ export const SeerrIndexPage: React.FC<Props> = ({
     isFetching: f2,
     isLoading: l2,
   } = useReactNavigationQuery({
-    queryKey: ["search", "seerr", "results", searchQuery],
-    queryFn: async () => {
-      return await searchSeerr(seerrApi, searchQuery);
-    },
+    // Starts from the first page the library search already fetched.
+    ...seerrSearchQuery(queryClient, seerrApi, searchQuery),
     enabled: !!seerrApi && searchQuery.length > 0,
   });
 

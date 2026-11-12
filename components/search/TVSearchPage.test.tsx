@@ -1,5 +1,6 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { fireEvent, render, screen } from "@testing-library/react-native";
+import { MediaType, type MovieResult } from "@/utils/seerr/types";
 import { TVSearchPage } from "./TVSearchPage";
 
 jest.mock("react-i18next", () => ({
@@ -34,6 +35,17 @@ jest.mock("@/components/tv/TVPosterCard", () => {
     ),
   };
 });
+// A Seerr poster too: its badges and its request check are not under test.
+jest.mock("@/components/tv/TVSeerrPosterCard", () => {
+  const { Pressable, Text } = jest.requireActual("react-native");
+  return {
+    TVSeerrPosterCard: ({ item, onPress }: any) => (
+      <Pressable onPress={onPress}>
+        <Text>{item.title ?? item.name}</Text>
+      </Pressable>
+    ),
+  };
+});
 jest.mock("@/components/common/ServerImage", () => ({ Image: () => null }));
 // The native search field and the Discover rows are not what is under test.
 jest.mock("@/modules/tv-search", () => ({ TvSearchView: () => null }));
@@ -48,8 +60,10 @@ jest.mock("./TVSearchTabBadges", () => ({ TVSearchTabBadges: () => null }));
 const studio: BaseItemDto = { Id: "studio-1", Type: "Studio", Name: "Pixar" };
 const actor: BaseItemDto = { Id: "person-1", Type: "Person", Name: "Tom" };
 
+type PageProps = React.ComponentProps<typeof TVSearchPage>;
+
 const renderPage = async (
-  results: { studios?: BaseItemDto[]; actors?: BaseItemDto[] },
+  results: Partial<PageProps>,
   onItemPress = jest.fn(),
   onItemLongPress = jest.fn(),
 ) => {
@@ -58,7 +72,6 @@ const renderPage = async (
       search='pix'
       setSearch={() => {}}
       debouncedSearch='pix'
-      {...results}
       loading={false}
       noResults={false}
       onItemPress={onItemPress}
@@ -66,6 +79,8 @@ const renderPage = async (
       searchType='Library'
       setSearchType={() => {}}
       showDiscover={false}
+      onSeerrResultPress={() => {}}
+      {...results}
     />,
   );
   return { onItemPress, onItemLongPress };
@@ -99,5 +114,64 @@ describe("TV search studios", () => {
 
     await fireEvent(screen.getByText("Tom"), "longPress");
     expect(onItemLongPress).toHaveBeenCalledWith(actor);
+  });
+});
+
+describe("TV search, what Seerr could add", () => {
+  const dune: MovieResult = {
+    id: 438631,
+    mediaType: MediaType.MOVIE,
+    title: "Dune",
+  };
+  const movie: BaseItemDto = { Id: "movie-1", Type: "Movie", Name: "Arrival" };
+
+  test("lists it in a row after the library's results and opens it", async () => {
+    const onSeerrResultPress = jest.fn();
+    await renderPage({
+      movies: [movie],
+      seerrNotInLibrary: [dune],
+      onSeerrResultPress,
+    });
+
+    expect(screen.getByText("search.movies")).toBeTruthy();
+    expect(
+      screen.getByText("seerr.library_search.not_in_your_library"),
+    ).toBeTruthy();
+    await fireEvent.press(screen.getByText("Dune"));
+    expect(onSeerrResultPress).toHaveBeenCalledWith(dune);
+  });
+
+  test("lists it under the line saying the library has nothing", async () => {
+    await renderPage({ noResults: true, seerrNotInLibrary: [dune] });
+
+    expect(screen.getByText("search.no_results_found_for")).toBeTruthy();
+    expect(screen.getByText("Dune")).toBeTruthy();
+  });
+
+  test("shows no row while the library search is loading", async () => {
+    await renderPage({ loading: true, seerrNotInLibrary: [dune] });
+
+    expect(screen.queryByText("Dune")).toBeNull();
+  });
+
+  test("shows no row when Seerr has nothing to add", async () => {
+    await renderPage({ movies: [movie], seerrNotInLibrary: [] });
+
+    expect(
+      screen.queryByText("seerr.library_search.not_in_your_library"),
+    ).toBeNull();
+  });
+
+  // Discover lists Seerr's results itself, in rows of its own.
+  test("shows no row in Discover", async () => {
+    await renderPage({
+      searchType: "Discover",
+      showDiscover: true,
+      seerrNotInLibrary: [dune],
+    });
+
+    expect(
+      screen.queryByText("seerr.library_search.not_in_your_library"),
+    ).toBeNull();
   });
 });

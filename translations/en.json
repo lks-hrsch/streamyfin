@@ -7,7 +7,6 @@
     "invalid_url": "Enter a valid address"
   },
   "login": {
-    "username_required": "Username is required",
     "error_title": "Error",
     "login_title": "Log in",
     "login_to_title": "Log in to",
@@ -501,7 +500,7 @@
           "enable_movie_recommendations": "Movie recommendations",
           "enable_series_recommendations": "Series recommendations",
           "enable_promoted_watchlists": "Promoted watchlists",
-          "hide_watchlists_tab": "Hide watchlists tab",
+          "hide_watchlists_tab": "Hide watchlists",
           "home_sections_hint": "Show personalized recommendations and promoted watchlists from Streamystats on the home page.",
           "recommended_movies": "Recommended movies",
           "recommended_series": "Recommended series",
@@ -866,8 +865,8 @@
     "noData": "Items you mark as favorites show up here."
   },
   "custom_links": {
-    "no_links": "No links",
-    "could_not_open_link": "Could not open this link"
+    "could_not_open_link": "Could not open this link",
+    "load_failed": "Couldn't load the custom links"
   },
   "player": {
     "live": "LIVE",
@@ -976,6 +975,14 @@
     "open": "Open chapters",
     "close": "Close chapters"
   },
+  "person_profile": {
+    "born": "Born {{date}}",
+    "born_in": "Born {{date}} in {{place}}",
+    "age": "age {{age}}",
+    "died": "Died {{date}}",
+    "died_aged": "Died {{date}}, aged {{age}}",
+    "in_library": "In library"
+  },
   "item_card": {
     "next_up": "Next up",
     "no_items_to_display": "No items to display",
@@ -1051,7 +1058,6 @@
       "Narrator": "Narrator"
     },
     "technical_details": "Technical details",
-    "appeared_in": "Appeared in",
     "movies": "Movies",
     "shows": "Shows",
     "could_not_load_item": "Could not load item",
@@ -1144,6 +1150,9 @@
     "studios": "Studios",
     "network": "Network",
     "currently_streaming_on": "Currently streaming on",
+    "library_search": {
+      "not_in_your_library": "Not in your library"
+    },
     "advanced": "Advanced",
     "request_as": "Request as",
     "tags": "Tags",
@@ -1158,6 +1167,9 @@
     "number_episodes_one": "{{count}} episode",
     "number_episodes_other": "{{count}} episodes",
     "born": "Born",
+    "library_links": {
+      "missing_from_collection": "Missing from this collection"
+    },
     "appearances": "Appearances",
     "approve": "Approve",
     "decline": "Decline",
@@ -1242,7 +1254,11 @@
     "library": "Library",
     "custom_links": "Custom links",
     "favorites": "Favorites",
-    "settings": "Settings"
+    "settings": "Settings",
+    "more": "More"
+  },
+  "more": {
+    "your_media": "Your media"
   },
   "music": {
     "title": "Music",
