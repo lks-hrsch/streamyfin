@@ -110,6 +110,16 @@ const BADGE_STATUS: Record<
 };
 
 /**
+ * The status a missing season stands for, as its icon and its colour read it
+ * (seasonRowStatus for the request sheet's rows). None for a failed request,
+ * which Seerr has no badge for.
+ */
+export const missingSeasonStatus = (
+  season: MissingSeason,
+): MediaStatus | undefined =>
+  season.badge === "failed" ? undefined : BADGE_STATUS[season.badge];
+
+/**
  * The badge a missing season draws, Seerr's own (seerrStatusBadge): a "+" on
  * one the user may ask for, and none for a failed request, which Seerr draws
  * none for either.
@@ -117,10 +127,9 @@ const BADGE_STATUS: Record<
 export const missingSeasonIcon = (
   season: MissingSeason,
   offersRequest: boolean,
-) =>
-  season.badge === "failed"
+) => {
+  const status = missingSeasonStatus(season);
+  return status === undefined
     ? undefined
-    : seerrStatusBadge(
-        BADGE_STATUS[season.badge],
-        offersRequest && season.requestable,
-      );
+    : seerrStatusBadge(status, offersRequest && season.requestable);
+};

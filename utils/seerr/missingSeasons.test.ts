@@ -2,10 +2,11 @@ import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import {
   type MissingSeason,
   missingSeasonIcon,
+  missingSeasonStatus,
   missingSeasons,
   seasonsHeldInFull,
 } from "./missingSeasons";
-import { unrequestedSeasons } from "./seasons";
+import { seasonRowStatus, unrequestedSeasons } from "./seasons";
 import {
   type MediaInfo,
   type MediaRequest,
@@ -327,5 +328,38 @@ describe("missingSeasonIcon", () => {
     expect(
       missingSeasonIcon(season({ badge: "failed", requestable: false }), true),
     ).toBeUndefined();
+  });
+});
+
+describe("missingSeasonStatus", () => {
+  const season = (badge: MissingSeason["badge"]): MissingSeason => ({
+    seasonNumber: 1,
+    episodeCount: 10,
+    badge,
+    requestable: false,
+  });
+
+  // The series page colours a missing season by it, as the request sheet
+  // colours its rows by seasonRowStatus: the two must not read apart.
+  test("stands for the status the request sheet gives each badge", () => {
+    for (const badge of [
+      "not_requested",
+      "pending",
+      "requested",
+      "partially_available",
+    ] as const) {
+      expect(missingSeasonStatus(season(badge))).toBe(
+        seasonRowStatus({
+          seasonNumber: 1,
+          episodeCount: 10,
+          badge,
+          locked: false,
+        }),
+      );
+    }
+  });
+
+  test("stands for none on a failed request", () => {
+    expect(missingSeasonStatus(season("failed"))).toBeUndefined();
   });
 });

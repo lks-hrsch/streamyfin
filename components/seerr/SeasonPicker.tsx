@@ -1,32 +1,16 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import type React from "react";
 import { useTranslation } from "react-i18next";
-import { Pressable, View } from "react-native";
-import { Text } from "@/components/common/Text";
-import { Colors, SeerrStatusColors, SheetColors } from "@/constants/Colors";
 import {
-  SEERR_BLOCKED_OPACITY,
-  SEERR_STATUS_TINT_ALPHA,
-} from "@/constants/Seerr";
+  SeasonStatusGroup,
+  SeasonStatusRow,
+} from "@/components/seerr/SeasonStatusRow";
+import { SeerrSeasonStatusColors, SheetColors } from "@/constants/Colors";
 import {
   type SeasonBadge,
   type SeasonRow,
   seasonRowStatus,
 } from "@/utils/seerr/seasons";
 import { seerrStatusBadge } from "@/utils/seerr/statusBadge";
-import { MediaStatus } from "@/utils/seerr/types";
-
-// A season already asked for or in the library shows where it stands in its
-// circle, with the season list's own icon, so the column of circles reads as
-// the state of the whole series.
-const STATUS_COLORS: Partial<Record<MediaStatus, string>> = {
-  [MediaStatus.PENDING]: SeerrStatusColors.pending,
-  [MediaStatus.PROCESSING]: SeerrStatusColors.requested,
-  [MediaStatus.PARTIALLY_AVAILABLE]: SeerrStatusColors.available,
-  [MediaStatus.AVAILABLE]: SeerrStatusColors.available,
-};
-
-const CIRCLE = 24;
 
 interface Props {
   rows: SeasonRow[];
@@ -64,122 +48,54 @@ export const SeasonPicker: React.FC<Props> = ({
   };
 
   return (
-    <View
-      style={{
-        backgroundColor: SheetColors.group,
-        borderRadius: 14,
-        overflow: "hidden",
-      }}
-    >
+    <SeasonStatusGroup>
       {rows.map((row, index) => {
         const chosen = !row.locked && selected.includes(row.seasonNumber);
         // Greyed like on Seerr once the quota is spent, except to switch off
         // a season already chosen.
         const blocked = !row.locked && !chosen && !roomForOneMore;
         const interactive = choosable && !row.locked && !blocked;
+        // A season already asked for or in the library shows where it stands
+        // in its circle, with the season list's own icon, so the column of
+        // circles reads as the state of the whole series.
         const status = seasonRowStatus(row);
-        const locked = row.locked
-          ? {
-              icon: seerrStatusBadge(status, false)?.icon,
-              color: STATUS_COLORS[status] ?? SheetColors.secondaryText,
-            }
-          : undefined;
-        const name =
-          row.seasonNumber === 0
-            ? t("seerr.specials")
-            : t("seerr.season_number", { season_number: row.seasonNumber });
-        const episodes = t("seerr.number_episodes", {
-          count: row.episodeCount,
-          episode_number: row.episodeCount,
-        });
+        const color =
+          SeerrSeasonStatusColors[status] ?? SheetColors.secondaryText;
 
         return (
-          <View key={row.seasonNumber}>
-            {index > 0 && (
-              <View
-                style={{
-                  height: 1,
-                  marginLeft: 14 + CIRCLE + 14,
-                  backgroundColor: SheetColors.separator,
-                }}
-              />
-            )}
-            <Pressable
-              disabled={!interactive}
-              onPress={() => onToggle(row.seasonNumber)}
-              accessibilityRole='checkbox'
-              // The status too: a label replaces what the row says.
-              accessibilityLabel={[
-                name,
-                episodes,
-                row.locked && row.badge ? statusText[row.badge] : undefined,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-              accessibilityState={{
-                checked: row.locked || chosen,
-                disabled: !interactive,
-              }}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 14,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                opacity: blocked ? SEERR_BLOCKED_OPACITY : 1,
-              }}
-            >
-              <View
-                style={{
-                  width: CIRCLE,
-                  height: CIRCLE,
-                  borderRadius: CIRCLE / 2,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  ...(locked
-                    ? {
-                        backgroundColor: `${locked.color}${SEERR_STATUS_TINT_ALPHA}`,
-                      }
-                    : chosen
-                      ? { backgroundColor: Colors.primary }
-                      : { borderWidth: 2, borderColor: SheetColors.idle }),
-                }}
-              >
-                {locked ? (
-                  locked.icon && (
-                    <MaterialCommunityIcons
-                      name={locked.icon}
-                      size={15}
-                      color={locked.color}
-                    />
-                  )
-                ) : chosen ? (
-                  <Ionicons name='checkmark' size={15} color='white' />
-                ) : null}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 17 }} numberOfLines={1}>
-                  {name}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 13,
-                    marginTop: 1,
-                    color: SheetColors.secondaryText,
-                  }}
-                >
-                  {episodes}
-                </Text>
-              </View>
-              {locked && row.badge && (
-                <Text style={{ fontSize: 13, color: locked.color }}>
-                  {statusText[row.badge]}
-                </Text>
-              )}
-            </Pressable>
-          </View>
+          <SeasonStatusRow
+            key={row.seasonNumber}
+            separated={index > 0}
+            name={
+              row.seasonNumber === 0
+                ? t("seerr.specials")
+                : t("seerr.season_number", { season_number: row.seasonNumber })
+            }
+            episodes={t("seerr.number_episodes", {
+              count: row.episodeCount,
+              episode_number: row.episodeCount,
+            })}
+            circle={
+              row.locked
+                ? { color, icon: seerrStatusBadge(status, false)?.icon }
+                : chosen
+                  ? "chosen"
+                  : "open"
+            }
+            status={
+              row.locked && row.badge
+                ? { text: statusText[row.badge], color }
+                : undefined
+            }
+            toggle={{
+              checked: row.locked || chosen,
+              disabled: !interactive,
+              dimmed: blocked,
+              onPress: () => onToggle(row.seasonNumber),
+            }}
+          />
         );
       })}
-    </View>
+    </SeasonStatusGroup>
   );
 };

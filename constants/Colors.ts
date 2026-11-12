@@ -1,4 +1,5 @@
 import type { SeerrStatusTone } from "@/utils/seerr/statusBadge";
+import { MediaStatus } from "@/utils/seerr/types";
 
 export const Colors = {
   primary: "#9334E9",
@@ -33,6 +34,18 @@ export const SeerrStatusColors = {
   pending: "#f59e0b",
   requested: "#818cf8",
 } as const;
+
+/**
+ * A season that stands somewhere on Seerr, by the status its icon draws
+ * (seasonRowStatus): the request sheets' seasons and the series page's
+ * missing ones alike. A status not listed has no colour of its own.
+ */
+export const SeerrSeasonStatusColors: Partial<Record<MediaStatus, string>> = {
+  [MediaStatus.PENDING]: SeerrStatusColors.pending,
+  [MediaStatus.PROCESSING]: SeerrStatusColors.requested,
+  [MediaStatus.PARTIALLY_AVAILABLE]: SeerrStatusColors.available,
+  [MediaStatus.AVAILABLE]: SeerrStatusColors.available,
+};
 
 /** Seerr's badges (its Badge): each tone's fill, edge and text. */
 export const SeerrBadgeColors = {
