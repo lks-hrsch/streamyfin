@@ -33,7 +33,8 @@ jest.mock("@/components/cards/CardData", () => ({
     items.map((item) => ({ id: item.Id, title: item.Name })),
 }));
 jest.mock("@/components/common/TouchableItemRouter", () => ({
-  getItemNavigation: (item: { Id: string }) => `/items/page?id=${item.Id}`,
+  getItemNavigation: (item: { Id: string; Type?: string }) =>
+    item.Type === "Series" ? `/series/${item.Id}` : `/items/page?id=${item.Id}`,
 }));
 // The row stands in as its cards: each a pressable title, its overlay inside.
 jest.mock("@/components/cards/CardRow", () => {
@@ -116,6 +117,82 @@ describe("PersonFilmographyRow", () => {
       expect.objectContaining({
         pathname: "/(auth)/(tabs)/(home)/seerr/page",
         params: expect.objectContaining({ id: "605", mediaType: "movie" }),
+      }),
+    );
+  });
+
+  // Reported from the app: a person's series Seerr reports in the library
+  // opened Seerr's page, where its episodes do not play.
+  test("opens the library's page of a Seerr title Seerr has found in Jellyfin", async () => {
+    await render(
+      <PersonFilmographyRow
+        title='Shows'
+        entries={[
+          {
+            source: "seerr",
+            credit: {
+              id: 1413,
+              mediaType: MediaType.TV,
+              title: "American Horror Story",
+              mediaInfo: {
+                status: MediaStatus.PARTIALLY_AVAILABLE,
+                jellyfinMediaId: "jf-ahs",
+              },
+              roles: [{ character: "Tate Langdon" }],
+            } as never,
+          },
+          {
+            source: "seerr",
+            credit: {
+              id: 603,
+              mediaType: MediaType.MOVIE,
+              title: "The Matrix",
+              mediaInfo: {
+                status: MediaStatus.AVAILABLE,
+                jellyfinMediaId: "jf-603",
+              },
+              roles: [{ character: "Neo" }],
+            } as never,
+          },
+        ]}
+      />,
+    );
+
+    await fireEvent.press(screen.getByText("American Horror Story"));
+    expect(mockPush).toHaveBeenLastCalledWith("/series/jf-ahs");
+
+    await fireEvent.press(screen.getByText("The Matrix"));
+    expect(mockPush).toHaveBeenLastCalledWith("/items/page?id=jf-603");
+  });
+
+  // Seerr keeps a deleted title's Jellyfin id while it is fetched again.
+  test("opens Seerr's page of a title Seerr no longer reports there", async () => {
+    await render(
+      <PersonFilmographyRow
+        title='Movies'
+        entries={[
+          {
+            source: "seerr",
+            credit: {
+              id: 603,
+              mediaType: MediaType.MOVIE,
+              title: "The Matrix",
+              mediaInfo: {
+                status: MediaStatus.PROCESSING,
+                jellyfinMediaId: "jf-gone",
+              },
+              roles: [],
+            } as never,
+          },
+        ]}
+      />,
+    );
+
+    await fireEvent.press(screen.getByText("The Matrix"));
+    expect(mockPush).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        pathname: "/(auth)/(tabs)/(home)/seerr/page",
+        params: expect.objectContaining({ id: "603", mediaType: "movie" }),
       }),
     );
   });

@@ -38,7 +38,11 @@ import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import { getBackdropUrl } from "@/utils/jellyfin/image/getBackdropUrl";
 import { getUserItemData } from "@/utils/jellyfin/user-library/getUserItemData";
-import type { FilmographyEntry } from "@/utils/seerr/personProfile";
+import { libraryItemOf } from "@/utils/seerr/libraryLinks";
+import type {
+  FilmographyEntry,
+  PersonCredit,
+} from "@/utils/seerr/personProfile";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -197,6 +201,27 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
     [from, router],
   );
 
+  // A Seerr title opens its Seerr page, where it can be requested, unless
+  // Seerr has found it in the library: then its library page, as a library
+  // card does.
+  const handleSeerrPress = useCallback(
+    (credit: PersonCredit) => {
+      const inLibrary = libraryItemOf(credit);
+      if (inLibrary) {
+        handleItemPress(inLibrary);
+        return;
+      }
+      router.push({
+        pathname: "/(auth)/(tabs)/(search)/seerr/page",
+        params: {
+          id: String(credit.id),
+          mediaType: credit.mediaType,
+        },
+      });
+    },
+    [handleItemPress, router],
+  );
+
   // Every card is the same width, library or Seerr.
   const getItemLayout = useCallback(
     (_data: ArrayLike<FilmographyEntry> | null | undefined, index: number) => ({
@@ -229,20 +254,18 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
             <TVSeerrPosterCard
               item={entry.credit}
               hasTVPreferredFocus={row === firstRow && index === 0}
-              onPress={() =>
-                router.push({
-                  pathname: "/(auth)/(tabs)/(search)/seerr/page",
-                  params: {
-                    id: String(entry.credit.id),
-                    mediaType: entry.credit.mediaType,
-                  },
-                })
-              }
+              onPress={() => handleSeerrPress(entry.credit)}
             />
           )}
         </View>
       ),
-    [handleItemPress, showItemActions, posterSizes.poster, firstRow, router],
+    [
+      handleItemPress,
+      handleSeerrPress,
+      showItemActions,
+      posterSizes.poster,
+      firstRow,
+    ],
   );
   const renderMovieEntry = useMemo(() => renderEntry("movies"), [renderEntry]);
   const renderShowEntry = useMemo(() => renderEntry("shows"), [renderEntry]);
