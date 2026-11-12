@@ -5,11 +5,11 @@ import {
   SeasonStatusRow,
 } from "@/components/seerr/SeasonStatusRow";
 import { SeerrSeasonStatusColors, SheetColors } from "@/constants/Colors";
+import { type SeasonRow, seasonRowStatus } from "@/utils/seerr/seasons";
 import {
-  type SeasonBadge,
-  type SeasonRow,
-  seasonRowStatus,
-} from "@/utils/seerr/seasons";
+  seerrSeasonLabel,
+  seerrSeasonStatusText,
+} from "@/utils/seerr/seasonText";
 import { seerrStatusBadge } from "@/utils/seerr/statusBadge";
 
 interface Props {
@@ -38,15 +38,6 @@ export const SeasonPicker: React.FC<Props> = ({
 }) => {
   const { t } = useTranslation();
 
-  // Written out rather than built, so each key reads as used.
-  const statusText: Record<SeasonBadge, string> = {
-    not_requested: t("seerr.season_badge.not_requested"),
-    pending: t("seerr.season_badge.pending"),
-    requested: t("seerr.season_badge.requested"),
-    partially_available: t("seerr.season_badge.partially_available"),
-    available: t("seerr.season_badge.available"),
-  };
-
   return (
     <SeasonStatusGroup>
       {rows.map((row, index) => {
@@ -66,11 +57,7 @@ export const SeasonPicker: React.FC<Props> = ({
           <SeasonStatusRow
             key={row.seasonNumber}
             separated={index > 0}
-            name={
-              row.seasonNumber === 0
-                ? t("seerr.specials")
-                : t("seerr.season_number", { season_number: row.seasonNumber })
-            }
+            name={seerrSeasonLabel(t, row.seasonNumber)}
             episodes={t("seerr.number_episodes", {
               count: row.episodeCount,
               episode_number: row.episodeCount,
@@ -84,7 +71,7 @@ export const SeasonPicker: React.FC<Props> = ({
             }
             status={
               row.locked && row.badge
-                ? { text: statusText[row.badge], color }
+                ? { text: seerrSeasonStatusText(t, row.badge), color }
                 : undefined
             }
             toggle={{

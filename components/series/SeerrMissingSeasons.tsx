@@ -20,10 +20,13 @@ import {
 import { useSeerrMissingSeasons } from "@/hooks/useSeerrMissingSeasons";
 import { ANIME_KEYWORD_ID } from "@/utils/seerr/data";
 import {
-  type MissingSeasonBadge,
   missingSeasonIcon,
   missingSeasonStatus,
 } from "@/utils/seerr/missingSeasons";
+import {
+  seerrSeasonLabel,
+  seerrSeasonStatusText,
+} from "@/utils/seerr/seasonText";
 import { type MediaRequestBody, MediaType } from "@/utils/seerr/types";
 
 /**
@@ -48,14 +51,6 @@ export const SeerrMissingSeasons: React.FC<{
 
   if (!details) return null;
 
-  // Written out rather than built, so each key reads as used.
-  const statusText: Record<MissingSeasonBadge, string> = {
-    not_requested: t("seerr.season_badge.not_requested"),
-    pending: t("seerr.season_badge.pending"),
-    requested: t("seerr.season_badge.requested"),
-    partially_available: t("seerr.season_badge.partially_available"),
-    failed: t("seerr.request_status.failed"),
-  };
   const title = item.Name ?? details.name;
 
   // As the Seerr page opens it: Seerr's season table, nothing chosen yet.
@@ -90,13 +85,7 @@ export const SeerrMissingSeasons: React.FC<{
             <SeasonStatusRow
               key={season.seasonNumber}
               separated={index > 0}
-              name={
-                season.seasonNumber === 0
-                  ? t("seerr.specials")
-                  : t("seerr.season_number", {
-                      season_number: season.seasonNumber,
-                    })
-              }
+              name={seerrSeasonLabel(t, season.seasonNumber)}
               episodes={t("seerr.number_episodes", {
                 count: season.episodeCount,
                 episode_number: season.episodeCount,
@@ -105,7 +94,7 @@ export const SeerrMissingSeasons: React.FC<{
                 color,
                 icon: missingSeasonIcon(season, offersRequest)?.icon,
               }}
-              status={{ text: statusText[season.badge], color }}
+              status={{ text: seerrSeasonStatusText(t, season.badge), color }}
             />
           );
         })}

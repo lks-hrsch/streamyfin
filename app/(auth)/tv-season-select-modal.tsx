@@ -26,6 +26,7 @@ import { useTVRequestModal } from "@/hooks/useTVRequestModal";
 import { tvSeasonSelectModalAtom } from "@/utils/atoms/tvSeasonSelectModal";
 import { seasonQuotaText } from "@/utils/seerr/quota";
 import { type SeasonRow, seasonRowStatus } from "@/utils/seerr/seasons";
+import { seerrSeasonLabel } from "@/utils/seerr/seasonText";
 import { seerrStatusBadge } from "@/utils/seerr/statusBadge";
 import type { MediaRequestBody } from "@/utils/seerr/types";
 import { MediaType } from "@/utils/seerr/types";
@@ -110,9 +111,7 @@ const TVSeasonToggleCard: React.FC<{
           ]}
           numberOfLines={1}
         >
-          {row.seasonNumber === 0
-            ? t("seerr.specials")
-            : t("seerr.season_number", { season_number: row.seasonNumber })}
+          {seerrSeasonLabel(t, row.seasonNumber)}
         </Text>
         <Text
           style={[

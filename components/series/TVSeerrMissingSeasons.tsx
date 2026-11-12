@@ -18,9 +18,12 @@ import { requestTVFocus } from "@/utils/requestTVFocus";
 import { scaleSize } from "@/utils/scaleSize";
 import {
   type MissingSeason,
-  type MissingSeasonBadge,
   missingSeasonIcon,
 } from "@/utils/seerr/missingSeasons";
+import {
+  seerrSeasonLabel,
+  seerrSeasonStatusText,
+} from "@/utils/seerr/seasonText";
 
 // A season nobody may ask for has no badge of its own: a quiet circle.
 const NO_BADGE_COLOR = "rgba(255,255,255,0.2)";
@@ -152,15 +155,6 @@ export const TVSeerrMissingSeasons: React.FC<{
 
   if (seasons.length === 0) return null;
 
-  // Written out rather than built, so each key reads as used.
-  const statusText: Record<MissingSeasonBadge, string> = {
-    not_requested: t("seerr.season_badge.not_requested"),
-    pending: t("seerr.season_badge.pending"),
-    requested: t("seerr.season_badge.requested"),
-    partially_available: t("seerr.season_badge.partially_available"),
-    failed: t("seerr.request_status.failed"),
-  };
-
   return (
     <View style={{ marginTop: scaleSize(28) }}>
       <Text
@@ -219,11 +213,7 @@ export const TVSeerrMissingSeasons: React.FC<{
                   color: "#FFFFFF",
                 }}
               >
-                {season.seasonNumber === 0
-                  ? t("seerr.specials")
-                  : t("seerr.season_number", {
-                      season_number: season.seasonNumber,
-                    })}
+                {seerrSeasonLabel(t, season.seasonNumber)}
               </Text>
               <Text
                 style={{
@@ -234,7 +224,7 @@ export const TVSeerrMissingSeasons: React.FC<{
                       : "rgba(255,255,255,0.6)",
                 }}
               >
-                {statusText[season.badge]}
+                {seerrSeasonStatusText(t, season.badge)}
               </Text>
             </View>
           );
