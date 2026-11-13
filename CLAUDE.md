@@ -98,6 +98,7 @@ TV platform:
 - `platform-specific-file-suffix-does-not-work` | .tv.* only resolves under EXPO_TV=1; require the TV file explicitly behind Platform.isTV
 - `tvfocusguideview-ignores-display-style` | TVFocusGuideView sets its own display last, so `display: "none"` in its style is ignored; hide it with `enabled={false}`
 - `android-tv-modal-close-loses-focus` | a dismissed TV modal route leaves Android TV with nothing focused; the page must hand the focus back with requestTVFocus(). BlurView only tints there
+- `tv-clickpad-thumb-is-not-a-swipe` | a thumb resting or clicking on the Siri Remote clickpad makes pan movement; the Apple TV player's pan goes through TVRemotePanGate (dead zone, presses stop it), or pausing commits a scrub
 
 Build and tooling:
 - `mac-catalyst-build` | Mac app = iOS target on Catalyst (opt-in); derived MPVKit slice, Apple Silicon only, own sandbox entitlements, per-pod fixes and why
@@ -185,7 +186,7 @@ nix develop --command fastlane ios release target:ios dry_run:true   # target:io
 | `patches/` | Patch package overrides |
 | `augmentations/` | Type augmentations |
 | `test-utils/` | Shared test doubles: Jellyfin API, MMKV, the file system, custom headers, React Native, Reanimated, @expo/ui, drax |
-| `tests/native/` | Standalone native checks (subtitle geometry, app container paths), each run by its script in `scripts/ios/`, and subtitle playback fixtures |
+| `tests/native/` | Standalone native checks (subtitle geometry, app container paths, the Apple TV clickpad pan), each run by its script in `scripts/ios/`, and subtitle playback fixtures |
 | `translations/` | i18n catalogues, `en.json` is the only source |
 | `scripts/` | Repo tooling run through bun |
 | `biome-plugins/` | Custom Biome (Grit) lint rules, wired up in `biome.json` |
