@@ -13,6 +13,7 @@ import { Colors } from "@/constants/Colors";
 import useRouter from "@/hooks/useAppRouter";
 import { useSeerr } from "@/hooks/useSeerr";
 import { apiAtom } from "@/providers/JellyfinProvider";
+import { libraryItemOf } from "@/utils/seerr/libraryLinks";
 import { type FilmographyEntry, roleText } from "@/utils/seerr/personProfile";
 import { canRequest } from "@/utils/seerr/requests";
 
@@ -27,7 +28,8 @@ const subtitleOf = (year: number | undefined, role: string | undefined) =>
  * One row of a library person's filmography on the phone: the library's
  * titles first, marked as there, then the rest Seerr knows the person made,
  * with their Seerr status. Both open where they belong: a library title its
- * item page, the rest its Seerr page, where it can be requested.
+ * item page, the rest its Seerr page, where it can be requested, unless Seerr
+ * has found it in the library, whose page it then opens too.
  */
 export const PersonFilmographyRow: React.FC<{
   title: string;
@@ -100,6 +102,11 @@ export const PersonFilmographyRow: React.FC<{
         return;
       }
       const { credit } = entry;
+      const inLibrary = libraryItemOf(credit);
+      if (inLibrary) {
+        router.push(getItemNavigation(inLibrary, from) as never);
+        return;
+      }
       router.push({
         pathname: `/(auth)/(tabs)/${from}/seerr/page`,
         params: {
