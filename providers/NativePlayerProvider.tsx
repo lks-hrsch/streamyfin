@@ -401,8 +401,7 @@ const NativePlayerProviderInner: React.FC<{
   const { lockOrientation, unlockOrientation } = useOrientation();
   const downloadUtils = useDownload();
   const revalidateProgressCache = useInvalidatePlaybackProgressCache();
-  const { subscribe, clearLastMessage, retainInBackground } =
-    useWebSocketContext();
+  const { subscribe, retainInBackground } = useWebSocketContext();
   const syncPlay = useSyncPlay();
   const syncRef = useRef(syncPlay);
   syncRef.current = syncPlay;
@@ -1234,10 +1233,6 @@ const NativePlayerProviderInner: React.FC<{
       session.committed = true;
       setActiveItem(session.item);
       setIsActive(true);
-      // Empty the legacy single-slot state before playback starts: it is
-      // still read by hooks/useWebsockets, and a stale coalesced "Stop" or
-      // "Seek" left over from browsing must not fire at the player.
-      clearLastMessage();
       reportPlaybackStart(session);
       void pushSegments(session);
       void pushEpisodeList(session);
@@ -1260,7 +1255,6 @@ const NativePlayerProviderInner: React.FC<{
       reportPlaybackStopped,
       releaseLiveStream,
       revalidateProgressCache,
-      clearLastMessage,
       pushSegments,
       pushEpisodeList,
       buildNextEpisodePayload,
@@ -2329,9 +2323,9 @@ const NativePlayerProviderInner: React.FC<{
   // native session are mutually exclusive, so handling these here cannot
   // double-handle with hooks/useWebsockets.
   //
-  // Subscribed rather than read off `lastMessage`: that slot keeps only the
-  // newest message, and the socket carries session broadcasts continuously, so
-  // a command could be overwritten before the effect ever ran. It made remote
+  // Subscribed: the context used to keep only the newest message in state,
+  // and the socket carries session broadcasts continuously, so a command
+  // could be overwritten before an effect reading it ever ran. It made remote
   // control look like it worked and then quietly stop.
   useEffect(() => {
     const handle = (
