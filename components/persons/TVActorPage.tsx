@@ -14,10 +14,10 @@ import React, {
 import { useTranslation } from "react-i18next";
 import {
   Animated,
-  Dimensions,
   Easing,
   FlatList,
   ScrollView,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,6 +29,7 @@ import { usePersonFactLines } from "@/components/persons/usePersonFactLines";
 import { TVPosterCard } from "@/components/tv/TVPosterCard";
 import { TVSeerrPosterCard } from "@/components/tv/TVSeerrPosterCard";
 import { Colors } from "@/constants/Colors";
+import { TV_DETAIL_OVERVIEW_MAX_WIDTH_RATIO } from "@/constants/TVDetailLayout";
 import { useScaledTVPosterSizes } from "@/constants/TVPosterSizes";
 import { useScaledTVSizes } from "@/constants/TVSizes";
 import { useScaledTVTypography } from "@/constants/TVTypography";
@@ -44,8 +45,6 @@ import type {
   PersonCredit,
 } from "@/utils/seerr/personProfile";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
 const HORIZONTAL_PADDING = 80;
 const TOP_PADDING = 140;
 const ACTOR_IMAGE_SIZE = 250;
@@ -58,6 +57,7 @@ interface TVActorPageProps {
 export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const router = useRouter();
   const { showItemActions } = useTVItemActionModal();
   const segments = useSegments();
@@ -448,7 +448,7 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
                   fontSize: typography.body,
                   color: "#D1D5DB",
                   lineHeight: typography.body * 1.4,
-                  maxWidth: SCREEN_WIDTH * 0.45,
+                  maxWidth: windowWidth * TV_DETAIL_OVERVIEW_MAX_WIDTH_RATIO,
                 }}
                 numberOfLines={4}
               >

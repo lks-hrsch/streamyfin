@@ -26,17 +26,11 @@ jest.mock("@/hooks/useAppRouter", () => ({
   __esModule: true,
   default: () => mockRouter,
 }));
-jest.mock("@/utils/device", () => ({ getOrSetDeviceId: () => "test-device" }));
 jest.mock("@/utils/customHeaders", () => ({
   getJellyfinHeaders: () => ({}),
   hasHeaders: () => false,
 }));
 jest.mock("@/utils/errors", () => ({ describeHttpResponse: () => undefined }));
-jest.mock("@/utils/log", () => ({
-  logAndCaptureError: jest.fn(),
-  writeErrorLog: jest.fn(),
-  writeToLog: jest.fn(),
-}));
 jest.mock("@/utils/jellyfin/socketFailure", () => ({
   ...jest.requireActual("@/utils/jellyfin/socketFailure"),
   reportSocketFastRetriesExhausted: (...args: unknown[]) =>

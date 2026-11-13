@@ -7,10 +7,10 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Animated,
-  Dimensions,
   Pressable,
   ScrollView,
   TVFocusGuideView,
+  useWindowDimensions,
   View,
   type ViewInstance,
 } from "react-native";
@@ -26,6 +26,11 @@ import { TVSeerrSeasons } from "@/components/seerr/tv/TVSeerrSeasons";
 import { TVButton } from "@/components/tv";
 import { useTVFocusAnimation } from "@/components/tv/hooks/useTVFocusAnimation";
 import { SEERR_BACKDROP_SIZE } from "@/constants/Seerr";
+import {
+  TV_DETAIL_HEADER_MIN_HEIGHT_RATIO,
+  TV_DETAIL_OVERVIEW_MAX_WIDTH_RATIO,
+  TV_DETAIL_POSTER_WIDTH_RATIO,
+} from "@/constants/TVDetailLayout";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import { BACKGROUND_IMAGE_TRANSITION } from "@/constants/Values";
 import useRouter from "@/hooks/useAppRouter";
@@ -53,8 +58,6 @@ import {
   MediaStatus,
   MediaType,
 } from "@/utils/seerr/types";
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 // Cast card component
 interface TVCastCardProps {
@@ -168,6 +171,7 @@ const TVCastCard: React.FC<TVCastCardProps> = ({
 export const TVSeerrPage: React.FC = () => {
   const typography = useScaledTVTypography();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const params = useLocalSearchParams();
   const { t } = useTranslation();
   const router = useRouter();
@@ -504,13 +508,13 @@ export const TVSeerrPage: React.FC = () => {
         <View
           style={{
             flexDirection: "row",
-            minHeight: SCREEN_HEIGHT * 0.45,
+            minHeight: windowHeight * TV_DETAIL_HEADER_MIN_HEIGHT_RATIO,
           }}
         >
           {/* Left side - Poster */}
           <View
             style={{
-              width: SCREEN_WIDTH * 0.22,
+              width: windowWidth * TV_DETAIL_POSTER_WIDTH_RATIO,
               marginRight: 50,
             }}
           >
@@ -604,7 +608,7 @@ export const TVSeerrPage: React.FC = () => {
                 style={{
                   borderRadius: 8,
                   overflow: "hidden",
-                  maxWidth: SCREEN_WIDTH * 0.45,
+                  maxWidth: windowWidth * TV_DETAIL_OVERVIEW_MAX_WIDTH_RATIO,
                   marginBottom: 32,
                 }}
               >
@@ -796,7 +800,7 @@ export const TVSeerrPage: React.FC = () => {
             destinations={[firstSeasonCardRef]}
             style={{
               height: 1,
-              width: SCREEN_WIDTH,
+              width: windowWidth,
               marginLeft: -(insets.left + 80),
             }}
           />
@@ -806,7 +810,7 @@ export const TVSeerrPage: React.FC = () => {
             destinations={[playButtonRef]}
             style={{
               height: 1,
-              width: SCREEN_WIDTH,
+              width: windowWidth,
               marginLeft: -(insets.left + 80),
             }}
           />
@@ -845,7 +849,7 @@ export const TVSeerrPage: React.FC = () => {
                 destinations={[firstCastCardRef]}
                 style={{
                   height: 1,
-                  width: SCREEN_WIDTH,
+                  width: windowWidth,
                   marginLeft: -(insets.left + 80),
                 }}
               />
@@ -857,7 +861,7 @@ export const TVSeerrPage: React.FC = () => {
                 destinations={[playButtonRef]}
                 style={{
                   height: 1,
-                  width: SCREEN_WIDTH,
+                  width: windowWidth,
                   marginLeft: -(insets.left + 80),
                 }}
               />

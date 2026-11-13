@@ -23,9 +23,6 @@ jest.mock("@/hooks/useAppRouter", () => ({
 jest.mock("@/providers/WebSocketProvider", () => ({
   useWebSocketContext: () => ({ subscribe: mockSubscribe }),
 }));
-jest.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
 
 const props = {
   isPlaying: true,
@@ -36,7 +33,6 @@ const props = {
 };
 
 beforeEach(() => {
-  jest.clearAllMocks();
   mockHandlers.clear();
   stubReactNative({ isTV: false });
 });

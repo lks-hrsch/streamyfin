@@ -1,5 +1,6 @@
 import type {
   BaseItemDto,
+  BaseItemPerson,
   UserDto,
 } from "@jellyfin/sdk/lib/generated-client/models";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -8,7 +9,7 @@ import { createStore, Provider as JotaiProvider } from "jotai";
 import type { ReactNode } from "react";
 import { OfflineModeProvider } from "@/providers/OfflineModeProvider";
 import { makeApi } from "@/test-utils/jellyfinApi";
-import { useSeriesCast } from "./useSeriesCast";
+import { seriesCast, useSeriesCast } from "./useSeriesCast";
 
 let mockApi: ReturnType<typeof makeApi> | null = null;
 let mockUser: UserDto | null = null;
@@ -207,5 +208,122 @@ describe("useSeriesCast", () => {
     await rerender({ item: SERIES });
 
     expect(result.current).toBe(first);
+  });
+});
+
+describe("seriesCast", () => {
+  /** A person as `/Persons` answers one: an item, without a role. */
+  const personItem = (id: string, name: string): BaseItemDto => ({
+    Id: id,
+    Name: name,
+    Type: "Person",
+    ImageTags: { Primary: `${id}-tag` },
+    ImageBlurHashes: { Primary: { [`${id}-tag`]: "blur" } },
+  });
+
+  test("keeps the series' own actors in its order, one entry each with every role", () => {
+    const cast = seriesCast(
+      [
+        { Id: "bates", Name: "Kathy Bates", Type: "Actor", Role: "Delphine" },
+        { Id: "paulson", Name: "Sarah Paulson", Type: "Actor", Role: "Lana" },
+        { Id: "bates", Name: "Kathy Bates", Type: "Actor", Role: "Ethel" },
+      ],
+      [],
+    );
+
+    expect(cast.map((person) => [person.Id, person.Role])).toEqual([
+      ["bates", "Delphine, Ethel"],
+      ["paulson", "Lana"],
+    ]);
+  });
+
+  // Season 1's lead of an anthology is credited on its episodes only.
+  test("adds the actors of the episodes after them, in the server's order", () => {
+    const cast = seriesCast(
+      [{ Id: "bates", Name: "Kathy Bates", Type: "Actor", Role: "Delphine" }],
+      [
+        personItem("mcdermott", "Dylan McDermott"),
+        personItem("peters", "Evan Peters"),
+      ],
+    );
+
+    expect(cast.map((person) => person.Id)).toEqual([
+      "bates",
+      "mcdermott",
+      "peters",
+    ]);
+  });
+
+  test("lists an actor of the series and of its episodes once, with the series' roles", () => {
+    const cast = seriesCast(
+      [{ Id: "bates", Name: "Kathy Bates", Type: "Actor", Role: "Delphine" }],
+      [personItem("bates", "Kathy Bates"), personItem("bates", "Kathy Bates")],
+    );
+
+    expect(cast).toHaveLength(1);
+    expect(cast[0].Role).toBe("Delphine");
+  });
+
+  test("gives an actor of the episodes the shape of a credit, image included", () => {
+    const [peters] = seriesCast([], [personItem("peters", "Evan Peters")]);
+
+    expect(peters).toEqual({
+      Id: "peters",
+      Name: "Evan Peters",
+      Type: "Actor",
+      Role: null,
+      PrimaryImageTag: "peters-tag",
+      ImageBlurHashes: { Primary: { "peters-tag": "blur" } },
+    });
+  });
+
+  // The crew has the header's credit lines, and a guest star belongs to the
+  // one episode they appear in.
+  test("leaves the crew and the guest stars out", () => {
+    const cast = seriesCast(
+      [
+        { Id: "murphy", Name: "Ryan Murphy", Type: "Creator" },
+        { Id: "guest", Name: "A Guest", Type: "GuestStar", Role: "Visitor" },
+        { Id: "bates", Name: "Kathy Bates", Type: "Actor", Role: "Delphine" },
+      ],
+      [],
+    );
+
+    expect(cast.map((person) => person.Id)).toEqual(["bates"]);
+  });
+
+  // Every entry of the row is an actor: the kind would say nothing.
+  test("an actor without a role has none, rather than the kind", () => {
+    const [actor] = seriesCast(
+      [{ Id: "a", Name: "An Actor", Type: "Actor" }],
+      [],
+    );
+
+    expect(actor.Role).toBeNull();
+  });
+
+  test("skips anyone without an id, and answers empty for nobody", () => {
+    expect(
+      seriesCast(
+        [{ Name: "Nobody", Type: "Actor" }],
+        [{ Name: "Nobody either", Type: "Person" }],
+      ),
+    ).toEqual([]);
+    expect(seriesCast(undefined, undefined)).toEqual([]);
+    expect(seriesCast(null, null)).toEqual([]);
+  });
+
+  // Both lists are React Query's cached data.
+  test("does not write to what it was given", () => {
+    const people: BaseItemPerson[] = [
+      { Id: "bates", Name: "Kathy Bates", Type: "Actor", Role: "Delphine" },
+      { Id: "bates", Name: "Kathy Bates", Type: "Actor", Role: "Ethel" },
+    ];
+    const episodeActors = [personItem("peters", "Evan Peters")];
+
+    seriesCast(people, episodeActors);
+
+    expect(people[0].Role).toBe("Delphine");
+    expect(episodeActors[0]).toEqual(personItem("peters", "Evan Peters"));
   });
 });

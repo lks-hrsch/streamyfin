@@ -3,26 +3,11 @@ import { fireEvent, render, screen } from "@testing-library/react-native";
 import { MediaType, type MovieResult } from "@/utils/seerr/types";
 import { TVSearchPage } from "./TVSearchPage";
 
-jest.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
-jest.mock("react-native-safe-area-context", () => ({
-  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
-}));
 jest.mock("@/providers/JellyfinProvider", () => {
   const { atom } = jest.requireActual("jotai");
   return { apiAtom: atom({ basePath: "http://server" }) };
 });
 // The real module drags the whole settings UI in; the TV sizes only read this.
-jest.mock("@/utils/atoms/settings", () => ({
-  TVTypographyScale: {
-    Small: "small",
-    Default: "default",
-    Large: "large",
-    ExtraLarge: "extraLarge",
-  },
-  useSettings: () => ({ settings: { tvTypographyScale: "default" } }),
-}));
 // A poster is its name and its two presses here; its artwork, its glass and
 // its focus animation need the native side.
 jest.mock("@/components/tv/TVPosterCard", () => {
@@ -46,7 +31,6 @@ jest.mock("@/components/tv/TVSeerrPosterCard", () => {
     ),
   };
 });
-jest.mock("@/components/common/ServerImage", () => ({ Image: () => null }));
 // The native search field is not what is under test, nor what the Discover
 // rows draw: only whether they are there, and what they are given.
 jest.mock("@/modules/tv-search", () => ({ TvSearchView: () => null }));

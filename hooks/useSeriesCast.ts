@@ -9,13 +9,56 @@ import { useQuery } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
 import { PEOPLE_STALE_TIME_MS } from "@/constants/People";
+import { type CastCrewPerson, mergePeopleById } from "@/hooks/useCastCrew";
 import { useServerVersion } from "@/hooks/useServerVersion";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import { useOfflineMode } from "@/providers/OfflineModeProvider";
-import { seriesCast } from "@/utils/jellyfin/people";
 import { supportsPersonsUnderParent } from "@/utils/jellyfin/serverVersion";
 
-const NO_ONE: BaseItemPerson[] = [];
+/**
+ * The cast of a series: the actors the series itself credits, in its order and
+ * once each with all their roles, then every actor of its episodes it does
+ * not, in the order the server lists them.
+ *
+ * The series' own credits are what the metadata provider has for the show as a
+ * whole, which leaves out whoever left it: an anthology credits its latest
+ * seasons, and season 1's lead is credited on that season's episodes only.
+ *
+ * Actors only. The crew has the header's credit lines, and a guest star is the
+ * guest of one episode: a long series has hundreds, who would bury the
+ * regulars. Their episode's page lists them.
+ *
+ * `episodeActors` are people as `/Persons` answers them, items without a role.
+ */
+export const seriesCast = (
+  seriesPeople: BaseItemPerson[] | null | undefined,
+  episodeActors: BaseItemDto[] | null | undefined,
+): CastCrewPerson[] => {
+  // No kind label: every one of them is an actor, so the kind would say
+  // nothing a role does not, and an actor without a role is left without one.
+  const cast = mergePeopleById(
+    seriesPeople?.filter((person) => person.Type === PersonKind.Actor),
+    undefined,
+  );
+  const listed = new Set(cast.map((person) => person.Id));
+
+  for (const person of episodeActors ?? []) {
+    if (!person.Id || listed.has(person.Id)) continue;
+    listed.add(person.Id);
+    cast.push({
+      Id: person.Id,
+      Name: person.Name,
+      Type: PersonKind.Actor,
+      Role: null,
+      PrimaryImageTag: person.ImageTags?.Primary ?? null,
+      ImageBlurHashes: person.ImageBlurHashes ?? null,
+    });
+  }
+
+  return cast;
+};
+
+const NO_ONE: CastCrewPerson[] = [];
 
 /**
  * The cast of a series for its page: the actors the series credits, then the
@@ -29,7 +72,7 @@ const NO_ONE: BaseItemPerson[] = [];
  */
 export const useSeriesCast = (
   series: BaseItemDto | null | undefined,
-): BaseItemPerson[] => {
+): CastCrewPerson[] => {
   const api = useAtomValue(apiAtom);
   const user = useAtomValue(userAtom);
   const isOffline = useOfflineMode();
