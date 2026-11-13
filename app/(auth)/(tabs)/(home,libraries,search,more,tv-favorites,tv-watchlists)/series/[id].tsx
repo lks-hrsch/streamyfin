@@ -16,6 +16,7 @@ import { Image } from "@/components/common/ServerImage";
 import { DownloadItems } from "@/components/DownloadItem";
 import { ParallaxScrollView } from "@/components/ParallaxPage";
 import { SimilarItems } from "@/components/SimilarItems";
+import { SeerrMissingSeasons } from "@/components/seerr/SeerrMissingSeasons";
 import { NextUp } from "@/components/series/NextUp";
 import {
   SeasonPicker,
@@ -306,6 +307,10 @@ const page: React.FC = () => {
             <View className='mb-4'>
               <NextUp seriesId={seriesId} />
             </View>
+          )}
+          {/* Seerr is a server: nothing to ask it offline. */}
+          {!isOffline && (
+            <SeerrMissingSeasons item={item} episodes={allEpisodes} />
           )}
           {allEpisodes !== undefined && (
             <SeasonPicker item={item} initialSeasonIndex={initialSeasonIndex} />
