@@ -6,6 +6,7 @@ import {
   supportsLibraryCollectionsAndPlaylists,
   supportsNameBounds,
   supportsOriginalAudioLanguage,
+  supportsPersonsUnderParent,
   supportsPerVersionUserData,
   supportsQuickConnectForOtherUsers,
 } from "./serverVersion";
@@ -38,6 +39,17 @@ test("does not ask a server of unknown version for an item's collections", () =>
   expect(supportsItemCollections(null)).toBe(false);
   expect(supportsItemCollections("")).toBe(false);
   expect(supportsItemCollections("12invalid")).toBe(false);
+});
+
+// 10.11 drops the parent and answers every person of the server.
+test("requires Jellyfin 12 or newer to list the people under an item", () => {
+  expect(supportsPersonsUnderParent("10.10.7")).toBe(false);
+  expect(supportsPersonsUnderParent("10.11.11")).toBe(false);
+  expect(supportsPersonsUnderParent("12.0.0-rc1")).toBe(true);
+  expect(supportsPersonsUnderParent("12.0.0")).toBe(true);
+  expect(supportsPersonsUnderParent("12.2.0")).toBe(true);
+  expect(supportsPersonsUnderParent()).toBe(false);
+  expect(supportsPersonsUnderParent(null)).toBe(false);
 });
 
 test("requires Jellyfin 10.9 or newer to approve Quick Connect for another user", () => {

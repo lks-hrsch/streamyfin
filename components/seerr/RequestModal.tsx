@@ -29,6 +29,12 @@ import {
   requestTagIds,
   requestTagsLabel,
 } from "@/utils/seerr/requests";
+import type { HeldSeasons } from "@/utils/seerr/seasons";
+import {
+  defaultRequestServer,
+  requestServers,
+  selectRequestServer,
+} from "@/utils/seerr/servers";
 import type {
   MediaRequestBody,
   MediaType,
@@ -47,6 +53,8 @@ interface Props {
   is4k?: boolean;
   /** A series' details: its seasons are chosen here, as on Seerr. */
   details?: TvDetails;
+  /** Seasons the library holds in full, shown available rather than offered. */
+  heldSeasons?: HeldSeasons;
   /** Whether the user may pick the server, profile, folder, tags and user. */
   advanced?: boolean;
   onRequested?: () => void;
@@ -64,7 +72,9 @@ const RequestModal = forwardRef<
       requestBody,
       type,
       isAnime = false,
+      is4k = false,
       details,
+      heldSeasons,
       advanced = true,
       onRequested,
       onDismiss,
@@ -82,10 +92,13 @@ const RequestModal = forwardRef<
     });
     const forOthers = canRequestForOthers(seerrUser?.permissions ?? 0);
 
+    const [serverOpen, setServerOpen] = useState(false);
     const [qualityProfileOpen, setQualityProfileOpen] = useState(false);
     const [rootFolderOpen, setRootFolderOpen] = useState(false);
     const [tagsOpen, setTagsOpen] = useState(false);
     const [usersOpen, setUsersOpen] = useState(false);
+    // Unset follows Seerr's default server.
+    const [pickedServerId, setPickedServerId] = useState<number>();
 
     const { t } = useTranslation();
 
@@ -120,10 +133,12 @@ const RequestModal = forwardRef<
       quotaUserId:
         (advanced && forOthers ? requestOverrides.userId : undefined) ??
         seerrUser?.id,
+      held: heldSeasons,
     });
 
     // Reset all dropdown states when modal closes
     const handleDismiss = useCallback(() => {
+      setServerOpen(false);
       setQualityProfileOpen(false);
       setRootFolderOpen(false);
       setTagsOpen(false);
@@ -146,9 +161,17 @@ const RequestModal = forwardRef<
       refetchOnMount: "always",
     });
 
-    const defaultService = useMemo(
-      () => serviceSettings?.find?.((v) => v.isDefault),
-      [serviceSettings],
+    const servers = useMemo(
+      () => requestServers(serviceSettings, is4k),
+      [serviceSettings, is4k],
+    );
+
+    // The server the request goes to: the one picked, else Seerr's default.
+    const selectedService = useMemo(
+      () =>
+        servers.find((server) => server.id === pickedServerId) ??
+        defaultRequestServer(servers),
+      [servers, pickedServerId],
     );
 
     const { data: defaultServiceDetails } = useQuery({
@@ -158,19 +181,19 @@ const RequestModal = forwardRef<
         type,
         "service",
         "details",
-        defaultService?.id,
+        selectedService?.id,
       ],
       queryFn: async () => {
         setRequestOverrides((prev) => ({
           ...prev,
-          serverId: defaultService?.id,
+          serverId: selectedService?.id,
         }));
         return seerrApi?.serviceDetails(
           type === "movie" ? "radarr" : "sonarr",
-          defaultService!.id,
+          selectedService!.id,
         );
       },
-      enabled: advanced && !!seerrApi && !!seerrUser && !!defaultService,
+      enabled: advanced && !!seerrApi && !!seerrUser && !!selectedService,
       refetchOnMount: "always",
     });
 
@@ -235,6 +258,34 @@ const RequestModal = forwardRef<
             f.path === (requestOverrides.rootFolder || defaultFolder?.path),
         ) ?? defaultFolder,
       [defaultServiceDetails, requestOverrides.rootFolder, defaultFolder],
+    );
+
+    const serverLabel = useCallback(
+      (server: { name: string; isDefault: boolean }) =>
+        server.isDefault
+          ? t("seerr.server_default", { server: server.name })
+          : server.name,
+      [t],
+    );
+
+    const serverOptions = useMemo(
+      () => [
+        {
+          options: servers.map((server) => ({
+            type: "radio" as const,
+            label: serverLabel(server),
+            value: server.id.toString(),
+            selected: selectedService?.id === server.id,
+            onPress: () => {
+              setPickedServerId(server.id);
+              setRequestOverrides((prev) =>
+                selectRequestServer(prev, server.id),
+              );
+            },
+          })),
+        },
+      ],
+      [servers, selectedService, serverLabel],
     );
 
     const qualityProfileOptions = useMemo(
@@ -344,7 +395,7 @@ const RequestModal = forwardRef<
         // Only a user who may choose them sends a server, profile, folder,
         // tags or another user: Seerr picks its defaults for everyone else.
         ...(advanced && {
-          is4k: defaultService?.is4k || defaultServiceDetails?.server.is4k,
+          is4k: selectedService?.is4k || defaultServiceDetails?.server.is4k,
           profileId: defaultProfile?.id,
           rootFolder: defaultFolder?.path,
           tags: defaultTags.map((t) => t.id),
@@ -368,6 +419,8 @@ const RequestModal = forwardRef<
       seasonsToRequest,
       requestBody,
       requestOverrides,
+      selectedService,
+      defaultServiceDetails,
       defaultProfile,
       defaultFolder,
       defaultTags,
@@ -491,8 +544,29 @@ const RequestModal = forwardRef<
               </>
             )}
             <View style={{ gap: 8 }}>
-              {advanced && defaultService && defaultServiceDetails && (
+              {advanced && selectedService && defaultServiceDetails && (
                 <>
+                  {servers.length > 1 && (
+                    <View className='flex flex-col'>
+                      <Text className='opacity-50 mb-1 text-xs'>
+                        {t("seerr.destination_server")}
+                      </Text>
+                      <PlatformDropdown
+                        groups={serverOptions}
+                        trigger={
+                          <View className='bg-neutral-900 h-10 rounded-xl border-neutral-800 border px-3 py-2 flex flex-row items-center justify-between'>
+                            <Text numberOfLines={1}>
+                              {serverLabel(selectedService)}
+                            </Text>
+                          </View>
+                        }
+                        title={t("seerr.destination_server")}
+                        open={serverOpen}
+                        onOpenChange={setServerOpen}
+                      />
+                    </View>
+                  )}
+
                   <View className='flex flex-col'>
                     <Text className='opacity-50 mb-1 text-xs'>
                       {t("seerr.quality_profile")}

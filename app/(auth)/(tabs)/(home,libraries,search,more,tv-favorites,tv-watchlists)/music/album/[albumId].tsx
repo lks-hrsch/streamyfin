@@ -26,7 +26,7 @@ import {
   isPermanentlyDownloaded,
 } from "@/providers/AudioStorage";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
-import { useMusicPlayer } from "@/providers/MusicPlayerProvider";
+import { useMusicPlayerTrack } from "@/providers/MusicPlayerProvider";
 import { squareArtworkSide } from "@/utils/artworkSize";
 import { getJellyfinHeadersForUrl } from "@/utils/customHeaders";
 import { getAudioStreamUrl } from "@/utils/jellyfin/audio/getAudioStreamUrl";
@@ -40,7 +40,9 @@ export default function AlbumDetailScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { t } = useTranslation();
-  const { playQueue } = useMusicPlayer();
+  // Not useMusicPlayer(): this page would re-render on every progress update,
+  // and its inline renderItem would re-render every visible row with it.
+  const { playQueue } = useMusicPlayerTrack();
   const windowSize = useWindowDimensions();
   // The square follows the window's short side, see utils/artworkSize.ts.
   const artworkSize = squareArtworkSide(windowSize, { ratio: 0.5 });

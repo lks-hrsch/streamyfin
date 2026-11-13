@@ -6,7 +6,8 @@ export type TVRequestModalState = {
   title: string;
   id: number;
   mediaType: MediaType;
-  onRequested: () => void;
+  /** After a request went through, for a page that has more to refresh. */
+  onRequested?: () => void;
 } | null;
 
 export const tvRequestModalAtom = atom<TVRequestModalState>(null);

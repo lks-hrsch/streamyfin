@@ -16,6 +16,15 @@ struct DownloadTaskInfo: Codable {
   let destinationPath: String?
   var metadata: DownloadActivityMetadata?
   var createdAt: Date = Date()
+  /// Set while the download is paused after an interruption (see `DownloadPausePolicy`): its task
+  /// is gone and the entry, still keyed by that task's id, holds its place until it is resumed.
+  /// Optional rather than defaulted because synthesized decoding ignores defaults, and entries
+  /// written before this field existed must still load.
+  var pausedAt: Date?
+  /// The file in `DownloadResumeData` holding the paused transfer's resume data, when the server
+  /// allowed one (range requests, so direct downloads only). Without it the download starts over
+  /// when resumed.
+  var resumeDataFileName: String?
   /// Custom proxy auth headers. Deliberately left out of `CodingKeys`: these are
   /// credentials, and this store is an unencrypted App Group container. A
   /// background transfer already carries them in its own request, so nothing is
@@ -23,7 +32,7 @@ struct DownloadTaskInfo: Codable {
   var headers: [String: String]?
 
   private enum CodingKeys: String, CodingKey {
-    case url, destinationPath, metadata, createdAt
+    case url, destinationPath, metadata, createdAt, pausedAt, resumeDataFileName
   }
 }
 
@@ -116,5 +125,37 @@ final class DownloadTaskStore {
   func saveQueue(_ queue: [QueuedDownloadInfo]) {
     guard let data = try? JSONEncoder().encode(queue) else { return }
     defaults.set(data, forKey: Self.queueStorageKey)
+  }
+}
+
+/// Resume data of paused downloads, a file each. Kept out of the task store, a UserDefaults
+/// suite, and kept by name: the app's container path can change between launches.
+enum DownloadResumeData {
+  private static var directory: URL? {
+    FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+      .appendingPathComponent("BackgroundDownloader/ResumeData", isDirectory: true)
+  }
+
+  /// Writes the data and returns the name to keep, or nil when it could not be written.
+  static func save(_ data: Data) -> String? {
+    guard let directory else { return nil }
+    let name = "\(UUID().uuidString).resume"
+    do {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      try data.write(to: directory.appendingPathComponent(name), options: .atomic)
+      return name
+    } catch {
+      return nil
+    }
+  }
+
+  static func load(_ name: String) -> Data? {
+    guard let directory else { return nil }
+    return try? Data(contentsOf: directory.appendingPathComponent(name))
+  }
+
+  static func remove(_ name: String?) {
+    guard let name, let directory else { return }
+    try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
   }
 }

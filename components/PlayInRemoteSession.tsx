@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { BottomSheetView } from "@gorhom/bottom-sheet";
 import {
   type BaseItemDto,
   PlayCommand,
@@ -10,11 +11,15 @@ import { useTranslation } from "react-i18next";
 import {
   FlatList,
   Modal,
+  Platform,
+  type StyleProp,
   StyleSheet,
   TouchableOpacity,
   View,
+  type ViewStyle,
 } from "react-native";
 import { useAllSessions, type useSessionsProps } from "@/hooks/useSessions";
+import { useGlobalModal } from "@/providers/GlobalModalProvider";
 import { apiAtom } from "@/providers/JellyfinProvider";
 import { HeaderIcon } from "./common/HeaderIcon";
 import { Text } from "./common/Text";
@@ -31,29 +36,32 @@ export const PlayInRemoteSessionButton: React.FC<Props> = ({
   ...props
 }) => {
   const [modalVisible, setModalVisible] = useState(false);
-  const api = useAtomValue(apiAtom);
-  const { sessions, isLoading } = useAllSessions({} as useSessionsProps);
-  const { t } = useTranslation();
-  const handlePlayInSession = async (sessionId: string) => {
-    if (!api || !item.Id) return;
+  const { showModal, hideModal } = useGlobalModal();
+  // Loads the list ahead of the picker, which shares this query.
+  useAllSessions({} as useSessionsProps);
 
-    try {
-      console.log(`Playing ${item.Name} in session ${sessionId}`);
-      getSessionApi(api).play({
-        sessionId,
-        itemIds: [item.Id],
-        playCommand: PlayCommand.PlayNow,
-      });
-
-      setModalVisible(false);
-    } catch (error) {
-      console.error("Error playing in remote session:", error);
+  const openPicker = () => {
+    // On the Mac this button sits in the window toolbar, and a Modal presented
+    // from there never appears: the header's button group just goes blank.
+    // The app's sheet is presented from the root instead.
+    if (Platform.OS === "ios" && Platform.isMacCatalyst) {
+      showModal(
+        <BottomSheetView style={styles.sheet}>
+          <RemoteSessionPicker
+            item={item}
+            onClose={hideModal}
+            contentStyle={styles.sheetContent}
+          />
+        </BottomSheetView>,
+      );
+      return;
     }
+    setModalVisible(true);
   };
 
   return (
     <View {...props}>
-      <RoundButton onPress={() => setModalVisible(true)} size={props.size}>
+      <RoundButton onPress={openPicker} size={props.size}>
         <HeaderIcon
           name='remoteSession'
           size={props.size === "large" ? undefined : 18}
@@ -68,57 +76,10 @@ export const PlayInRemoteSessionButton: React.FC<Props> = ({
       >
         <View style={styles.centeredView}>
           <View style={styles.modalView}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {t("home.sessions.select_session")}
-              </Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name='close' size={24} color='white' />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalContent}>
-              {isLoading ? (
-                <View style={styles.loadingContainer}>
-                  <Loader />
-                </View>
-              ) : !sessions || sessions.length === 0 ? (
-                <Text style={styles.noSessionsText}>
-                  {t("home.sessions.no_active_sessions")}
-                </Text>
-              ) : (
-                <FlatList
-                  data={sessions}
-                  keyExtractor={(session) => session.Id || "unknown"}
-                  renderItem={({ item: session }) => (
-                    <TouchableOpacity
-                      style={styles.sessionItem}
-                      onPress={() => handlePlayInSession(session.Id || "")}
-                    >
-                      <View style={styles.sessionInfo}>
-                        <Text style={styles.sessionName}>
-                          {session.DeviceName}
-                        </Text>
-                        <Text style={styles.sessionDetails}>
-                          {session.UserName} • {session.Client}
-                        </Text>
-                        {session.NowPlayingItem && (
-                          <Text style={styles.nowPlaying} numberOfLines={1}>
-                            {t("home.sessions.now_playing")}{" "}
-                            {session.NowPlayingItem.SeriesName
-                              ? `${session.NowPlayingItem.SeriesName} :`
-                              : ""}
-                            {session.NowPlayingItem.Name}
-                          </Text>
-                        )}
-                      </View>
-                      <Ionicons name='play-sharp' size={20} color='#888' />
-                    </TouchableOpacity>
-                  )}
-                  contentContainerStyle={styles.listContent}
-                />
-              )}
-            </View>
+            <RemoteSessionPicker
+              item={item}
+              onClose={() => setModalVisible(false)}
+            />
           </View>
         </View>
       </Modal>
@@ -126,7 +87,97 @@ export const PlayInRemoteSessionButton: React.FC<Props> = ({
   );
 };
 
+const RemoteSessionPicker: React.FC<{
+  item: BaseItemDto;
+  onClose: () => void;
+  contentStyle?: StyleProp<ViewStyle>;
+}> = ({ item, onClose, contentStyle }) => {
+  const api = useAtomValue(apiAtom);
+  const { sessions, isLoading } = useAllSessions({} as useSessionsProps);
+  const { t } = useTranslation();
+  const handlePlayInSession = async (sessionId: string) => {
+    if (!api || !item.Id) return;
+
+    try {
+      console.log(`Playing ${item.Name} in session ${sessionId}`);
+      getSessionApi(api).play({
+        sessionId,
+        itemIds: [item.Id],
+        playCommand: PlayCommand.PlayNow,
+      });
+
+      onClose();
+    } catch (error) {
+      console.error("Error playing in remote session:", error);
+    }
+  };
+
+  return (
+    <>
+      <View style={styles.modalHeader}>
+        <Text style={styles.modalTitle}>
+          {t("home.sessions.select_session")}
+        </Text>
+        <TouchableOpacity onPress={onClose}>
+          <Ionicons name='close' size={24} color='white' />
+        </TouchableOpacity>
+      </View>
+
+      <View style={[styles.modalContent, contentStyle]}>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <Loader />
+          </View>
+        ) : !sessions || sessions.length === 0 ? (
+          <Text style={styles.noSessionsText}>
+            {t("home.sessions.no_active_sessions")}
+          </Text>
+        ) : (
+          <FlatList
+            data={sessions}
+            keyExtractor={(session) => session.Id || "unknown"}
+            renderItem={({ item: session }) => (
+              <TouchableOpacity
+                style={styles.sessionItem}
+                onPress={() => handlePlayInSession(session.Id || "")}
+              >
+                <View style={styles.sessionInfo}>
+                  <Text style={styles.sessionName}>{session.DeviceName}</Text>
+                  <Text style={styles.sessionDetails}>
+                    {session.UserName} • {session.Client}
+                  </Text>
+                  {session.NowPlayingItem && (
+                    <Text style={styles.nowPlaying} numberOfLines={1}>
+                      {t("home.sessions.now_playing")}{" "}
+                      {session.NowPlayingItem.SeriesName
+                        ? `${session.NowPlayingItem.SeriesName} :`
+                        : ""}
+                      {session.NowPlayingItem.Name}
+                    </Text>
+                  )}
+                </View>
+                <Ionicons name='play-sharp' size={20} color='#888' />
+              </TouchableOpacity>
+            )}
+            contentContainerStyle={styles.listContent}
+          />
+        )}
+      </View>
+    </>
+  );
+};
+
 const styles = StyleSheet.create({
+  // The sheet sizes to its content, which the modal's flex layout would
+  // collapse; the list scrolls past this height instead.
+  sheet: {
+    maxHeight: 480,
+    paddingBottom: 24,
+  },
+  sheetContent: {
+    flex: 0,
+    flexShrink: 1,
+  },
   centeredView: {
     flex: 1,
     justifyContent: "center",

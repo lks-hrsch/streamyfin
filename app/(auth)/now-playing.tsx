@@ -23,7 +23,6 @@ import {
   View,
 } from "react-native";
 import { Slider } from "react-native-awesome-slider";
-import { CastButton, CastState } from "react-native-google-cast";
 import { useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import TextTicker from "react-native-text-ticker";
@@ -42,6 +41,7 @@ import { useFavorite } from "@/hooks/useFavorite";
 import { useMusicCast } from "@/hooks/useMusicCast";
 import { useNowPlayingVolume } from "@/hooks/useNowPlayingVolume";
 import { isSystemVolumeAvailable } from "@/modules/system-volume";
+import { CastButton, CastState } from "@/packages/react-native-google-cast";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import {
   type RepeatMode,

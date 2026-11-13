@@ -1,5 +1,7 @@
+import { queryOptions, skipToken } from "@tanstack/react-query";
 import uniqBy from "lodash/uniqBy";
 import { SEERR_SEARCH_PAGES } from "@/constants/Seerr";
+import { SEERR_SEARCH_REUSE_MS } from "@/constants/SeerrLibrarySearch";
 import type { SeerrApi } from "@/hooks/useSeerr";
 
 type SearchResult = Awaited<ReturnType<SeerrApi["search"]>>["results"][number];
@@ -35,7 +37,10 @@ export const seerrQueryString = (
     .join("&");
 
 /**
- * Seerr's first pages of results for what the user typed, each result once.
+ * Seerr's first pages of results for what the user typed, each result once. A
+ * result is told apart by its type and its number: a film, a series and a
+ * person each have numbers of their own on TMDB, so one number can be all
+ * three.
  *
  * The text goes out as typed. It used to go through URLSearchParams, which
  * reads its argument as a query string: "dune" went out as "dune=", which
@@ -59,9 +64,44 @@ export const searchSeerr = async (
 
   return uniqBy(
     [first, ...rest].flatMap((page) => page?.results ?? []),
-    "id",
+    (result) => `${result.mediaType}:${result.id}`,
   );
 };
+
+/** A Seerr client as far as searching goes: its search, and its address. */
+export type SeerrSearchApi = Pick<SeerrApi, "search"> & {
+  axios: { defaults: { baseURL?: string } };
+};
+
+/**
+ * Seerr's first page of results for a text, cached on its own: it is all the
+ * search asks for to list what Seerr could add, since it runs for every text
+ * typed. The address is in the key because a server the plugin points the app
+ * at instead keeps the session and the cache: nothing clears them, and the old
+ * server's results would answer for the new one.
+ */
+export const seerrFirstPageKey = (
+  api: SeerrSearchApi | undefined,
+  query: string,
+) =>
+  [
+    "search",
+    "seerr",
+    "results",
+    api?.axios.defaults.baseURL,
+    query,
+    "first page",
+  ] as const;
+
+export const seerrFirstPageQuery = (
+  api: SeerrSearchApi | undefined,
+  query: string,
+) =>
+  queryOptions({
+    queryKey: seerrFirstPageKey(api, query),
+    queryFn: api ? () => api.search({ query, page: 1 }) : skipToken,
+    staleTime: SEERR_SEARCH_REUSE_MS,
+  });
 
 /**
  * The page to ask for after `last` in a list Seerr gives a page at a time,

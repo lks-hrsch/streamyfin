@@ -46,9 +46,14 @@ type ScreenState =
 
 type ExpoCameraModule = typeof import("expo-camera");
 
-const ExpoCamera: ExpoCameraModule | null = Platform.isTV
-  ? null
-  : require("expo-camera");
+// No camera module on TV, nor on the Mac: expo-camera's scanner is built on
+// VisionKit's DataScannerViewController, which Mac Catalyst lacks, so the Mac
+// build leaves the module out (plugins/withMacCatalyst.ts) and types the code in.
+const hasCamera =
+  !Platform.isTV && !(Platform.OS === "ios" && Platform.isMacCatalyst);
+const ExpoCamera: ExpoCameraModule | null = hasCamera
+  ? require("expo-camera")
+  : null;
 
 /** A server address as shown on screen: no credentials, no scheme. */
 const serverLabel = (url: string) =>
@@ -71,7 +76,7 @@ export const CompanionLoginScreen: React.FC = () => {
   const user = useAtomValue(userAtom);
 
   const [screenState, setScreenState] = useState<ScreenState>(
-    ExpoCamera ? "scanning" : "manual",
+    hasCamera ? "scanning" : "manual",
   );
   const [code, setCode] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

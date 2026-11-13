@@ -16,15 +16,11 @@ import { scaleSize } from "@/utils/scaleSize";
 import type {
   DiscoverSlider,
   MovieResult,
-  PersonResult,
   TvResult,
 } from "@/utils/seerr/types";
 import { TVSearchSection } from "./TVSearchSection";
-import {
-  type TVSearchSortButtons,
-  TVSearchTabBadges,
-} from "./TVSearchTabBadges";
-import { TVSeerrSearchResults } from "./TVSeerrSearchResults";
+import { type TVSearchSort, TVSearchSortButtons } from "./TVSearchSortButtons";
+import { TVSeerrLibrarySearchRow } from "./TVSeerrLibrarySearchRow";
 
 const TOP_PADDING = 100;
 // Height of the native search bar itself. The tvOS grid keyboard presents as
@@ -100,8 +96,6 @@ const TVLoadingSkeleton: React.FC = () => {
   );
 };
 
-type SearchType = "Library" | "Discover";
-
 interface TVSearchPageProps {
   search: string;
   setSearch: (text: string) => void;
@@ -121,21 +115,12 @@ interface TVSearchPageProps {
   noResults: boolean;
   onItemPress: (item: BaseItemDto) => void;
   onItemLongPress?: (item: BaseItemDto) => void;
-  // Seerr/Discover props
-  searchType: SearchType;
-  setSearchType: (type: SearchType) => void;
-  showDiscover: boolean;
   /** The sort of the results, given once something is typed. */
-  sortButtons?: TVSearchSortButtons;
-  seerrMovies?: MovieResult[];
-  seerrTv?: TvResult[];
-  seerrPersons?: PersonResult[];
-  seerrLoading?: boolean;
-  seerrNoResults?: boolean;
-  onSeerrMoviePress?: (item: MovieResult) => void;
-  onSeerrTvPress?: (item: TvResult) => void;
-  onSeerrPersonPress?: (item: PersonResult) => void;
-  // Discover sliders for empty state
+  sortButtons?: TVSearchSort;
+  // What Seerr could add, listed after the library's results
+  seerrNotInLibrary?: (MovieResult | TvResult)[];
+  onSeerrResultPress: (item: MovieResult | TvResult) => void;
+  /** Seerr's Discover rows, what the page shows until something is typed. */
   discoverSliders?: DiscoverSlider[];
 }
 
@@ -156,18 +141,9 @@ export const TVSearchPage: React.FC<TVSearchPageProps> = ({
   noResults,
   onItemPress,
   onItemLongPress,
-  searchType,
-  setSearchType,
-  showDiscover,
   sortButtons,
-  seerrMovies = [],
-  seerrTv = [],
-  seerrPersons = [],
-  seerrLoading = false,
-  seerrNoResults = false,
-  onSeerrMoviePress,
-  onSeerrTvPress,
-  onSeerrPersonPress,
+  seerrNotInLibrary = [],
+  onSeerrResultPress,
   discoverSliders,
 }) => {
   const typography = useScaledTVTypography();
@@ -234,10 +210,9 @@ export const TVSearchPage: React.FC<TVSearchPageProps> = ({
     t,
   ]);
 
-  const isLibraryMode = searchType === "Library";
-  const isDiscoverMode = searchType === "Discover";
-  const currentLoading = isLibraryMode ? loading : seerrLoading;
-  const currentNoResults = isLibraryMode ? noResults : seerrNoResults;
+  // One search, no tabs: Discover's rows until something is typed, then the
+  // library's results and what Seerr could add.
+  const typing = debouncedSearch.length > 0;
 
   return (
     <View style={{ flex: 1 }}>
@@ -299,20 +274,15 @@ export const TVSearchPage: React.FC<TVSearchPageProps> = ({
           paddingBottom: insets.bottom + 60,
         }}
       >
-        {/* Search type tabs, and the sort of the results */}
-        {(showDiscover || sortButtons) && (
+        {/* The sort of the results */}
+        {sortButtons && (
           <View style={{ marginHorizontal: sizes.padding.horizontal }}>
-            <TVSearchTabBadges
-              searchType={searchType}
-              setSearchType={setSearchType}
-              showDiscover={showDiscover}
-              sortButtons={sortButtons}
-            />
+            <TVSearchSortButtons sort={sortButtons} />
           </View>
         )}
 
         {/* Loading State */}
-        {currentLoading && (
+        {loading && (
           <View style={{ gap: SECTION_GAP }}>
             <TVLoadingSkeleton />
             <TVLoadingSkeleton />
@@ -320,7 +290,7 @@ export const TVSearchPage: React.FC<TVSearchPageProps> = ({
         )}
 
         {/* Library Search Results */}
-        {isLibraryMode && !loading && (
+        {typing && !loading && (
           <View style={{ gap: SECTION_GAP }}>
             {sections.map((section) => (
               <TVSearchSection
@@ -350,28 +320,15 @@ export const TVSearchPage: React.FC<TVSearchPageProps> = ({
           </View>
         )}
 
-        {/* Seerr/Discover Search Results */}
-        {isDiscoverMode && !seerrLoading && debouncedSearch.length > 0 && (
-          <TVSeerrSearchResults
-            movieResults={seerrMovies}
-            tvResults={seerrTv}
-            personResults={seerrPersons}
-            loading={seerrLoading}
-            noResults={seerrNoResults}
-            searchQuery={debouncedSearch}
-            onMoviePress={onSeerrMoviePress || (() => {})}
-            onTvPress={onSeerrTvPress || (() => {})}
-            onPersonPress={onSeerrPersonPress || (() => {})}
-          />
-        )}
-
-        {/* Discover Content (when no search query in Discover mode) */}
-        {isDiscoverMode && !seerrLoading && debouncedSearch.length === 0 && (
-          <TVDiscover sliders={discoverSliders} />
+        {/* Until something is typed: Seerr's Discover rows to browse. They
+            come in after the page opened, so they leave the focus in the
+            search field rather than pulling it to their first card. */}
+        {!typing && (
+          <TVDiscover sliders={discoverSliders} claimsFocus={false} />
         )}
 
         {/* No Results State */}
-        {!currentLoading && currentNoResults && debouncedSearch.length > 0 && (
+        {!loading && noResults && typing && (
           <View style={{ alignItems: "center", paddingTop: 40 }}>
             <Text
               style={{
@@ -391,6 +348,18 @@ export const TVSearchPage: React.FC<TVSearchPageProps> = ({
             >
               "{debouncedSearch}"
             </Text>
+          </View>
+        )}
+
+        {/* After the library's results, and after the line saying it has
+            none: what the user could request instead. */}
+        {typing && !loading && seerrNotInLibrary.length > 0 && (
+          <View style={{ marginTop: SECTION_GAP }}>
+            <TVSeerrLibrarySearchRow
+              title={t("seerr.library_search.not_in_your_library")}
+              items={seerrNotInLibrary}
+              onItemPress={onSeerrResultPress}
+            />
           </View>
         )}
       </ScrollView>

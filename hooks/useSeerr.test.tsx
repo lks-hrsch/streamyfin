@@ -4,15 +4,19 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
-import type { AxiosAdapter } from "axios";
+import { type AxiosAdapter, AxiosError } from "axios";
 import type React from "react";
 import { toast } from "sonner-native";
+import { SEERR_USER_STORAGE_KEY } from "@/constants/Seerr";
 import { writeToLog } from "@/utils/log";
+import { storage } from "@/utils/mmkv";
 import { DiscoverSliderType } from "@/utils/seerr/types";
+import { store } from "@/utils/store";
 import {
   Endpoints,
   SeerrApi,
   seerrPublicSettingsQuery,
+  seerrUserAtom,
   useSeerrImageCache,
 } from "./useSeerr";
 
@@ -36,6 +40,57 @@ const answering = (body: string) => {
   api.axios.defaults.adapter = adapter;
   return api;
 };
+
+// A Seerr that refuses every request with `status` and `data`.
+const refusing = (status: number, data: unknown) => {
+  const api = new SeerrApi("https://seerr.example");
+  const adapter: AxiosAdapter = async (config) => {
+    throw new AxiosError("refused", "ERR_BAD_REQUEST", config, null, {
+      data,
+      status,
+      statusText: "",
+      headers: {},
+      config,
+    });
+  };
+  api.axios.defaults.adapter = adapter;
+  return api;
+};
+
+// The device had lost the session cookie while the Seerr user stayed stored:
+// Seerr answered every page 401, Discover and search stayed empty, and the
+// app went on as signed in, so it never signed in again.
+describe("a Seerr session the server does not have", () => {
+  test("is forgotten, so the app signs in again", async () => {
+    const user = { id: 7, displayName: "Lea" };
+    storage.setAny(SEERR_USER_STORAGE_KEY, user);
+    store.set(seerrUserAtom, user as never);
+
+    await refusing(401, {
+      message: "cookie 'connect.sid' required",
+    })
+      .discoverSettings()
+      .catch(() => undefined);
+
+    expect(storage.get(SEERR_USER_STORAGE_KEY)).toBeUndefined();
+    expect(store.get(seerrUserAtom)).toBeUndefined();
+  });
+
+  // A wrong password typed in the settings must not sign out the account
+  // that is still signed in.
+  test("is not what a refused sign-in means", async () => {
+    const user = { id: 7, displayName: "Lea" };
+    storage.setAny(SEERR_USER_STORAGE_KEY, user);
+    store.set(seerrUserAtom, user as never);
+
+    await refusing(401, { message: "Unauthorized" })
+      .login("lea", "wrong")
+      .catch(() => undefined);
+
+    expect(storage.get(SEERR_USER_STORAGE_KEY)).toEqual(user);
+    expect(store.get(seerrUserAtom)).toEqual(user);
+  });
+});
 
 // What stands in front of a Seerr answers in its place, with a 200: a
 // proxy's login page, a URL that points at the web app rather than the API.
@@ -130,6 +185,24 @@ describe("SeerrApi.test", () => {
       requiresPass: false,
     });
     expect(mockToastError).not.toHaveBeenCalled();
+  });
+});
+
+// The path the spec names, under the API's prefix: anything else answers
+// Seerr's 404, and a collection's missing films would quietly never show.
+describe("SeerrApi.collectionDetails", () => {
+  test("asks for the collection by its TMDB number", async () => {
+    const collection = { id: 10, name: "Star Wars Collection", parts: [] };
+    const api = answering(JSON.stringify(collection));
+    const adapter = api.axios.defaults.adapter as AxiosAdapter;
+    let asked: string | undefined;
+    api.axios.defaults.adapter = async (config) => {
+      asked = config.url;
+      return adapter(config);
+    };
+
+    expect(await api.collectionDetails(10)).toEqual(collection);
+    expect(asked).toBe("/api/v1/collection/10");
   });
 });
 

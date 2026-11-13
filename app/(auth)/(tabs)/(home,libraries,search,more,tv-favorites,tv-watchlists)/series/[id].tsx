@@ -18,11 +18,13 @@ import { Image } from "@/components/common/ServerImage";
 import { DownloadItems } from "@/components/DownloadItem";
 import { ParallaxScrollView } from "@/components/ParallaxPage";
 import { SimilarItems } from "@/components/SimilarItems";
+import { SeerrMissingSeasons } from "@/components/seerr/SeerrMissingSeasons";
 import { NextUp } from "@/components/series/NextUp";
 import {
   SeasonPicker,
   seasonIndexAtom,
 } from "@/components/series/SeasonPicker";
+import { SeriesCast } from "@/components/series/SeriesCast";
 import { SeriesHeader } from "@/components/series/SeriesHeader";
 import { TVSeriesPage } from "@/components/series/TVSeriesPage";
 import { useSeriesQueries } from "@/components/series/useSeriesQueries";
@@ -37,6 +39,8 @@ import { getLogoImageUrlById } from "@/utils/jellyfin/image/getLogoImageUrlById"
 import { toImagePixels } from "@/utils/jellyfin/image/imagePixels";
 import { storage } from "@/utils/mmkv";
 import { getSeriesPlaybackTarget } from "@/utils/seriesPlaybackTarget";
+
+// The cast row is covered by components/series/seriesPage.test.tsx.
 
 // Height of the backdrop header, in layout points.
 const HEADER_HEIGHT = 400;
@@ -253,8 +257,17 @@ const page: React.FC = () => {
               <NextUp seriesId={seriesId} />
             </View>
           )}
+          {/* Seerr is a server: nothing to ask it offline. */}
+          {!isOffline && (
+            <SeerrMissingSeasons item={item} episodes={allEpisodes} />
+          )}
           {allEpisodes !== undefined && (
             <SeasonPicker item={item} initialSeasonIndex={initialSeasonIndex} />
+          )}
+          {/* Mounted with the season list, so its request goes out once the
+              page's own have answered. Offline it draws nothing. */}
+          {allEpisodes !== undefined && (
+            <SeriesCast item={item} className='mt-4' />
           )}
           {!isOffline && <SimilarItems item={item} className='mt-4' />}
         </View>
