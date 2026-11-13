@@ -28,8 +28,18 @@ first; they are not cosmetic:
   excluded at `use_expo_modules!`), ActivityKit and `BGContinuedProcessingTask` in the
   background downloader (`!targetEnvironment(macCatalyst)`).
 - **react-native-track-player** needs `CoreAudio` imported implicitly (`-import-module`).
+- **Reanimated 4.7 imports AppKit on Catalyst.** `REAReducedMotion.h` imported AppKit
+  whenever the header exists, and on Catalyst it does. AppKit pulls in QuickDraw's global
+  `Rect` and `Point`, which clash with `facebook::react::Rect` in `NativeProxy.mm`: hundreds
+  of "reference to 'Rect' is ambiguous" errors, and the build stops. Every Mac build since
+  Expo SDK 58 failed on it (Release #27). `patches/react-native-reanimated@4.7.1.patch`
+  imports AppKit only where UIKit is missing; recheck it when Reanimated is bumped.
 - **React Native's ReactNativeDependencies.framework** Catalyst slice has its bundle symlinks
   materialized as copies; codesign calls it ambiguous. The embed script relinks the app's copy.
+  The prebuilt **React.framework** (React-Core-prebuilt, since SDK 58) keeps its links but
+  leaves `PrivacyInfo.xcprivacy` and `RCTI18nStrings.bundle` at the top: "unsealed contents
+  present in the root directory of an embedded framework". The same embed-script function
+  moves loose top-level entries into `Versions/A/Resources`, links intact or not.
 - **Tab switches never reached JS** (every tab but the first stayed blank): in the Mac
   idiom the tab bar is a toolbar control; selecting there calls neither `shouldSelect`
   delegate method react-native-bottom-tabs listened to, nor moves SwiftUI's selection

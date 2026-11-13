@@ -116,6 +116,7 @@
   ],
   "patchedDependencies": {
     "react-native-screens@4.30.1": "patches/react-native-screens@4.30.1.patch",
+    "react-native-reanimated@4.7.1": "patches/react-native-reanimated@4.7.1.patch",
     "react-native-track-player@github:lovegaoshi/react-native-track-player#d371784": "patches/react-native-track-player@4.1.1.patch",
     "react-native-udp@4.1.7": "patches/react-native-udp@4.1.7.patch",
     "react-native-drax@1.1.0": "patches/react-native-drax@1.1.0.patch",

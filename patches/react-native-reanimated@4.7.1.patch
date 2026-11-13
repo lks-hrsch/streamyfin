@@ -1,0 +1,17 @@
+diff --git a/apple/reanimated/apple/REAReducedMotion.h b/apple/reanimated/apple/REAReducedMotion.h
+index 5e22e18c7abe91f6ca6b1a58a5ff14a0f4e97647..3723e7a70a7742d659d735a221e913e276e9cd43 100644
+--- a/apple/reanimated/apple/REAReducedMotion.h
++++ b/apple/reanimated/apple/REAReducedMotion.h
+@@ -2,9 +2,9 @@
+ 
+ #if __has_include(<UIKit/UIAccessibility.h>)
+ #import <UIKit/UIAccessibility.h>
+-#endif
+-
+-#if __has_include(<AppKit/AppKit.h>)
++// Mac Catalyst has both. AppKit there brings QuickDraw's global Rect and
++// Point, which clash with facebook::react::Rect in NativeProxy.mm.
++#elif __has_include(<AppKit/AppKit.h>)
+ #import <AppKit/AppKit.h>
+ #endif
+ 
