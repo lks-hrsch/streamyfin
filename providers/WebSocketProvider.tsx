@@ -78,22 +78,19 @@ interface WebSocketContextType {
   ws: WebSocket | null;
   isConnected: boolean;
   /**
-   * @deprecated Prefer `subscribe`. `lastMessage` only keeps the most recent
-   * message, so bursts arriving in the same tick are coalesced and lost. Kept
-   * for `useWebsockets` (GeneralCommand handling) until it is migrated.
-   */
-  lastMessage: WebSocketMessage | null;
-  /**
    * Subscribe to a given message type. The handler is called synchronously for
-   * every matching message (no coalescing, unlike `lastMessage`). Returns an
-   * unsubscribe function to call on cleanup.
+   * every matching message. Returns an unsubscribe function to call on
+   * cleanup.
+   *
+   * The only way to read messages: none is kept in state, since the socket
+   * carries one at least every 30 seconds (the server's answer to this
+   * client's KeepAlive) and each would re-render every consumer.
    */
   subscribe: (
     messageType: string,
     handler: WebSocketMessageHandler,
   ) => () => void;
   sendMessage: (message: any) => void;
-  clearLastMessage: () => void;
   /** Native playback owns whether backgrounding leaves its SyncPlay group. */
   retainInBackground: () => () => void;
 }
@@ -130,7 +127,6 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
         () => setIsConnected(false),
       ),
   );
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
   const queryClient = useNetworkAwareQueryClient();
   const deviceId = useMemo(() => {
     return getOrSetDeviceId();
@@ -306,9 +302,6 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
         // Native PiP/backgrounding can suspend JS interval timers. Respond
         // in the message handler rather than wait for the next heartbeat.
         socketLifecycle.respondToKeepAlive(newWebSocket, message.MessageType);
-        // Legacy single-slot state, still consumed by useWebsockets.
-        setLastMessage(message);
-        // Pub/sub: deliver to every subscriber without coalescing.
         dispatchMessage(message);
       } catch (error) {
         logAndCaptureError("Error parsing WebSocket message", error);
@@ -510,21 +503,20 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
     },
     [ws, isConnected],
   );
-  const clearLastMessage = useCallback(() => {
-    setLastMessage(null);
-  }, []);
+  // A new value re-renders every consumer of the context, SyncPlay and the
+  // players among them, so it changes only with the socket or its state.
+  const value = useMemo(
+    () => ({
+      ws,
+      isConnected,
+      subscribe,
+      sendMessage,
+      retainInBackground: socketLifecycle.retainInBackground,
+    }),
+    [ws, isConnected, subscribe, sendMessage, socketLifecycle],
+  );
   return (
-    <WebSocketContext.Provider
-      value={{
-        ws,
-        isConnected,
-        lastMessage,
-        subscribe,
-        sendMessage,
-        clearLastMessage,
-        retainInBackground: socketLifecycle.retainInBackground,
-      }}
-    >
+    <WebSocketContext.Provider value={value}>
       {children}
     </WebSocketContext.Provider>
   );

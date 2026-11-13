@@ -3,6 +3,7 @@ import {
   type CombinedCredit,
   DiscoverSliderType,
   type GenreSliderItem,
+  ISSUE_TYPES,
   IssueStatus,
   IssueType,
   IssueTypeName,
@@ -47,6 +48,16 @@ describe("the values the spec serves as plain numbers", () => {
   test("name every issue type", () => {
     expect(Object.keys(IssueTypeName)).toHaveLength(4);
     expect(IssueTypeName[IssueType.SUBTITLES]).toBe("Subtitle");
+  });
+
+  // The phone and the TV both read this order; it is what the user sees.
+  test("offer every issue type once, video first", () => {
+    expect(ISSUE_TYPES.map((type) => IssueTypeName[type])).toEqual([
+      "Video",
+      "Audio",
+      "Subtitle",
+      "Other",
+    ]);
   });
 
   test("discriminate a result by its media type", () => {

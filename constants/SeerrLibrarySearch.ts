@@ -1,7 +1,7 @@
 /**
  * How long Seerr's first page of results for a text is reused before it is
- * asked for again: switching between Library and Discover, or typing back to
- * an earlier text, within a minute costs Seerr no new search. A request, a
+ * asked for again: typing back to an earlier text within a minute costs Seerr
+ * no new search. A request, a
  * pull to refresh and a sign out end that at once (touchedByRequest,
  * isSeerrQuery), so a status shown is still the one Seerr last reported.
  */

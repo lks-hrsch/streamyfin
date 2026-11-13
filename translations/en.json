@@ -251,7 +251,9 @@
         "mpv_note": "MPV on TV does not currently pass HDR metadata to the display, so HDR10/HDR10+ content is tone-mapped to SDR. Switch to ExoPlayer for HDR output.",
         "native_tv": "Native player (experimental)",
         "native_tv_note": "Use the new fully-native Apple TV player. Turn it off to fall back to the previous player if you run into playback issues.",
-        "native_android_tv_note": "Use the new fully-native Android TV player with the same MPV or ExoPlayer engine you selected above. Turn it off to fall back to the previous player if you run into playback issues."
+        "native_android_tv_note": "Use the new fully-native Android TV player with the same MPV or ExoPlayer engine you selected above. Turn it off to fall back to the previous player if you run into playback issues.",
+        "match_refresh_rate": "Match display refresh rate",
+        "match_refresh_rate_note": "Switch the TV to a refresh rate matching the video's frame rate, for example 50 Hz for 25 fps, so motion plays smoothly instead of juddering. The screen flashes briefly when the rate changes. Android TV only."
       },
       "buffer": {
         "title": "Buffer settings",
@@ -470,12 +472,7 @@
           "auto_login_title": "Sign in automatically",
           "auto_login_description": "Sign in to Seerr on launch. On a server with Quick Connect this needs no password; otherwise your Jellyfin password is kept in the device's secure storage and removed when you log out.",
           "reset_seerr_config_button": "Reset Seerr config",
-          "unlimited": "Unlimited",
-          "order_by": {
-            "DEFAULT": "Default",
-            "VOTE_COUNT_AND_AVERAGE": "Vote count and average",
-            "POPULARITY": "Popularity"
-          }
+          "unlimited": "Unlimited"
         },
         "marlin_search": {
           "enable_marlin_search": "Enable Marlin search",
@@ -754,8 +751,6 @@
   "search": {
     "search": "Search...",
     "x_items": "{{count}} items",
-    "library": "Library",
-    "discover": "Discover",
     "no_results": "No results",
     "no_results_found_for": "No results found for",
     "movies": "Movies",
@@ -923,6 +918,8 @@
     "downloaded_file_message": "Do you want to play the downloaded file?",
     "downloaded_file_yes": "Yes",
     "downloaded_file_no": "No",
+    "play_downloaded_file": "Play downloaded file",
+    "stream_file": "Stream file",
     "downloaded_file_cancel": "Cancel",
     "swipe_down_settings": "Swipe down for settings",
     "ends_at": "Ends at {{time}}",
@@ -1113,8 +1110,6 @@
     "cancel": "Cancel",
     "whats_wrong": "What's wrong?",
     "issue_type": "Issue type",
-    "select_an_issue": "Select an issue",
-    "types": "Types",
     "issue_details": "Please provide a detailed explanation of the issue you encountered.",
     "submit_button": "Submit",
     "report_issue_button": "Report issue",
@@ -1130,6 +1125,10 @@
       "failed": "Failed",
       "blocklisted": "Blocklisted",
       "deleted": "Deleted"
+    },
+    "series_page": {
+      "missing_seasons": "Missing seasons",
+      "request_seasons": "Request seasons"
     },
     "request_card_seasons_one": "Season",
     "request_card_seasons_other": "Seasons",

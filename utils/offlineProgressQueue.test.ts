@@ -7,11 +7,6 @@ import {
   markOfflineProgress,
 } from "./offlineProgressQueue";
 
-jest.mock(
-  "react-native-mmkv",
-  () => jest.requireActual("@/test-utils/mmkv").mmkvModule,
-);
-
 const T1 = "2026-11-05T10:00:00.000Z";
 const T2 = "2026-11-05T11:00:00.000Z";
 
@@ -21,11 +16,7 @@ describe("offlineProgressQueue", () => {
   test("queues an item once per user, with its latest save", () => {
     markOfflineProgress("alice", "episode-1", T1);
     markOfflineProgress("alice", "episode-1", T2);
-    markOfflineProgress("alice", "episode-2", undefined);
-    expect(getOfflineProgress("alice")).toEqual({
-      "episode-1": T2,
-      "episode-2": "",
-    });
+    expect(getOfflineProgress("alice")).toEqual({ "episode-1": T2 });
   });
 
   // Downloads have no owner: what one account watched offline must not be

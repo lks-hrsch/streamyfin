@@ -1,4 +1,3 @@
-import type { BaseItemPerson } from "@jellyfin/sdk/lib/generated-client/models";
 import React from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -6,14 +5,16 @@ import {
   TVFocusGuideView,
   View,
   type ViewInstance,
+  type ViewStyle,
 } from "react-native";
 import { Text } from "@/components/common/Text";
 import { useScaledTVSizes } from "@/constants/TVSizes";
 import { useScaledTVTypography } from "@/constants/TVTypography";
+import type { CastCrewPerson } from "@/hooks/useCastCrew";
 import { TVActorCard } from "./TVActorCard";
 
 export interface TVCastSectionProps {
-  cast: BaseItemPerson[];
+  cast: CastCrewPerson[];
   apiBasePath?: string;
   onActorPress: (personId: string) => void;
   /** Setter function for the first actor card ref (for focus guide) */
@@ -22,6 +23,11 @@ export interface TVCastSectionProps {
   upwardFocusDestination?: ViewInstance | null;
   /** Custom horizontal padding (overrides default 80) */
   horizontalPadding?: number;
+  /** Keeps the remote off the cards, as while a modal covers the page. */
+  disabled?: boolean;
+  /** Indents the heading to line up with the page's other headings. */
+  titleInset?: number;
+  style?: ViewStyle;
 }
 
 export const TVCastSection: React.FC<TVCastSectionProps> = React.memo(
@@ -32,6 +38,9 @@ export const TVCastSection: React.FC<TVCastSectionProps> = React.memo(
     firstActorRefSetter,
     upwardFocusDestination,
     horizontalPadding = 80,
+    disabled = false,
+    titleInset = 0,
+    style,
   }) => {
     const typography = useScaledTVTypography();
     const sizes = useScaledTVSizes();
@@ -42,13 +51,14 @@ export const TVCastSection: React.FC<TVCastSectionProps> = React.memo(
     }
 
     return (
-      <View style={{ marginBottom: 40 }}>
+      <View style={[{ marginBottom: 40 }, style]}>
         <Text
           style={{
             fontSize: typography.heading,
             fontWeight: "600",
             color: "#FFFFFF",
             marginBottom: 24,
+            marginLeft: titleInset,
           }}
         >
           {t("item_card.cast")}
@@ -72,15 +82,12 @@ export const TVCastSection: React.FC<TVCastSectionProps> = React.memo(
         >
           {cast.map((person, index) => (
             <TVActorCard
-              key={person.Id || index}
+              key={person.Id}
               ref={index === 0 ? firstActorRefSetter : undefined}
               person={person}
               apiBasePath={apiBasePath}
-              onPress={() => {
-                if (person.Id) {
-                  onActorPress(person.Id);
-                }
-              }}
+              disabled={disabled}
+              onPress={() => onActorPress(person.Id)}
             />
           ))}
         </ScrollView>

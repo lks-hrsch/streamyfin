@@ -64,7 +64,6 @@ const renderSearch = (props: Partial<Props>) => {
       useSeerrLibrarySearch({
         seerrApi: undefined,
         query: "matrix",
-        enabled: true,
         found: [],
         ...props,
       }),
@@ -110,18 +109,6 @@ describe.each([
     const { result } = await renderSearch({ seerrApi: undefined });
     await settle();
 
-    expect(jellyfin.mock.history.get).toHaveLength(0);
-    expect(result.current).toEqual([]);
-  });
-
-  // Discover lists Seerr's results itself, in rows of its own.
-  test("asks nothing in Discover", async () => {
-    const seerr = fakeSeerr();
-
-    const { result } = await renderSearch({ seerrApi: seerr, enabled: false });
-    await settle();
-
-    expect(seerr.search).not.toHaveBeenCalled();
     expect(jellyfin.mock.history.get).toHaveLength(0);
     expect(result.current).toEqual([]);
   });

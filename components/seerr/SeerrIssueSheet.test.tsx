@@ -1,6 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import type React from "react";
-import type { OptionGroup } from "@/components/PlatformDropdown";
 import { IssueType } from "@/utils/seerr/types";
 import { SeerrIssueSheet } from "./SeerrIssueSheet";
 
@@ -38,26 +37,9 @@ jest.mock("@gorhom/bottom-sheet", () => {
     BottomSheetTextInput: TextInput,
   };
 });
-// Lists the issue types instead of a menu to open, so a spec can pick one.
-jest.mock("@/components/PlatformDropdown", () => {
-  const { Text } = jest.requireActual("react-native");
-  return {
-    PlatformDropdown: ({ groups }: { groups: OptionGroup[] }) =>
-      groups.flatMap((group) =>
-        group.options.map((option) => (
-          <Text
-            key={option.label}
-            onPress={"onPress" in option ? option.onPress : undefined}
-          >
-            {option.label}
-          </Text>
-        )),
-      ),
-  };
-});
 
 const fillIn = async (type: string, message: string) => {
-  await fireEvent.press(screen.getByText(type));
+  await fireEvent.press(screen.getByRole("radio", { name: type }));
   await fireEvent.changeText(
     screen.getByPlaceholderText("seerr.issue_details"),
     message,
@@ -69,6 +51,36 @@ describe("SeerrIssueSheet", () => {
   beforeEach(() => {
     mockSubmitIssue.mockReset().mockResolvedValue({ id: 1 });
     mockClose.mockClear();
+  });
+
+  // The types used to sit in a dropdown whose iOS menu nested them one level
+  // deeper, under a lone "Types" row: two taps before one could be chosen.
+  test("offers every issue type at once, one tap to choose", async () => {
+    await render(<SeerrIssueSheet mediaId={42} />);
+
+    const options = screen.getAllByRole("radio");
+    expect(options).toHaveLength(4);
+    // The TV's order: the two sheets must not drift apart.
+    ["Video", "Audio", "Subtitle", "Other"].forEach((name, index) => {
+      expect(options[index]).toHaveAccessibleName(name);
+      expect(options[index]).not.toBeSelected();
+    });
+
+    await fireEvent.press(screen.getByRole("radio", { name: "Subtitle" }));
+    expect(screen.getByRole("radio", { name: "Subtitle" })).toBeSelected();
+    expect(screen.getByRole("radio", { name: "Video" })).not.toBeSelected();
+
+    await fireEvent.changeText(
+      screen.getByPlaceholderText("seerr.issue_details"),
+      "Out of sync",
+    );
+    await submit();
+    expect(mockSubmitIssue).toHaveBeenCalledWith(
+      42,
+      IssueType.SUBTITLES,
+      "Out of sync",
+      undefined,
+    );
   });
 
   test("files the issue against the title and closes", async () => {
@@ -126,7 +138,7 @@ describe("SeerrIssueSheet", () => {
   test("sends nothing without a type and a message", async () => {
     await render(<SeerrIssueSheet mediaId={42} />);
     await submit();
-    await fireEvent.press(screen.getByText("Audio"));
+    await fireEvent.press(screen.getByRole("radio", { name: "Audio" }));
     await submit();
 
     expect(mockSubmitIssue).not.toHaveBeenCalled();
