@@ -89,6 +89,17 @@ export const IssueTypeName: Record<IssueType, string> = {
   [IssueType.OTHER]: "Other",
 };
 
+/**
+ * The order the report issue sheets offer the types in, the phone's and the
+ * TV's alike, so the two cannot drift apart: Seerr's own numbering.
+ */
+export const ISSUE_TYPES: readonly IssueType[] = [
+  IssueType.VIDEO,
+  IssueType.AUDIO,
+  IssueType.SUBTITLES,
+  IssueType.OTHER,
+];
+
 /** `DiscoverSlider.type`: which row a slider draws. */
 export enum DiscoverSliderType {
   RECENTLY_ADDED = 1,

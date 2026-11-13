@@ -9,7 +9,6 @@ import {
   forwardRef,
   useCallback,
   useImperativeHandle,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -17,12 +16,12 @@ import { useTranslation } from "react-i18next";
 import { View } from "react-native";
 import { Button } from "@/components/Button";
 import { Text } from "@/components/common/Text";
-import { PlatformDropdown } from "@/components/PlatformDropdown";
+import { IssueTypePicker } from "@/components/seerr/IssueTypePicker";
 import { SheetColors } from "@/constants/Colors";
 import { useSeerr } from "@/hooks/useSeerr";
 import { writeErrorLog } from "@/utils/log";
 import { type IssueEpisode, issueReport } from "@/utils/seerr/libraryIssue";
-import { type IssueType, IssueTypeName } from "@/utils/seerr/types";
+import type { IssueType } from "@/utils/seerr/types";
 import { createSubmission } from "@/utils/submission";
 
 export interface SeerrIssueSheetRef {
@@ -59,7 +58,6 @@ export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
 
     const [issueType, setIssueType] = useState<IssueType>();
     const [message, setMessage] = useState<string>();
-    const [issueTypeDropdownOpen, setIssueTypeDropdownOpen] = useState(false);
 
     useImperativeHandle(ref, () => ({
       present: () => sheetRef.current?.present(),
@@ -92,7 +90,7 @@ export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
       if (!submission.start()) return;
       const report = issueReport(message, episode);
       seerrApi
-        .submitIssue(mediaId, Number(issueType), report.message, report.problem)
+        .submitIssue(mediaId, issueType, report.message, report.problem)
         .then(() => {
           setIssueType(undefined);
           setMessage(undefined);
@@ -107,28 +105,6 @@ export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
         .finally(() => submission.finish());
     }, [ready, seerrApi, mediaId, issueType, message, episode, submission]);
 
-    const handleDismiss = useCallback(() => {
-      setIssueTypeDropdownOpen(false);
-    }, []);
-
-    const issueTypeOptionGroups = useMemo(
-      () => [
-        {
-          title: t("seerr.types"),
-          options: Object.entries(IssueTypeName)
-            .reverse()
-            .map(([key, value]) => ({
-              type: "radio" as const,
-              label: value,
-              value: key,
-              selected: key === String(issueType),
-              onPress: () => setIssueType(key as unknown as IssueType),
-            })),
-        },
-      ],
-      [issueType, t],
-    );
-
     return (
       <BottomSheetModal
         ref={sheetRef}
@@ -141,7 +117,6 @@ export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
         }}
         backdropComponent={renderBackdrop}
         stackBehavior='push'
-        onDismiss={handleDismiss}
       >
         <BottomSheetView>
           <View className='flex flex-col px-4 pb-8 pt-2' style={{ gap: 16 }}>
@@ -160,21 +135,7 @@ export const SeerrIssueSheet = forwardRef<SeerrIssueSheetRef, Props>(
                 <Text className='opacity-50 mb-1 text-xs'>
                   {t("seerr.issue_type")}
                 </Text>
-                <PlatformDropdown
-                  groups={issueTypeOptionGroups}
-                  trigger={
-                    <View className='bg-neutral-900 h-10 rounded-xl border-neutral-800 border px-3 py-2 flex flex-row items-center justify-between'>
-                      <Text numberOfLines={1}>
-                        {issueType
-                          ? IssueTypeName[issueType]
-                          : t("seerr.select_an_issue")}
-                      </Text>
-                    </View>
-                  }
-                  title={t("seerr.types")}
-                  open={issueTypeDropdownOpen}
-                  onOpenChange={setIssueTypeDropdownOpen}
-                />
+                <IssueTypePicker value={issueType} onChange={setIssueType} />
               </View>
 
               <View className='p-4 border border-neutral-800 rounded-xl bg-neutral-900 w-full'>
