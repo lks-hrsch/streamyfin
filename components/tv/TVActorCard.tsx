@@ -16,10 +16,12 @@ export interface TVActorCardProps {
   apiBasePath?: string;
   onPress: () => void;
   hasTVPreferredFocus?: boolean;
+  /** Keeps the remote off the card, as while a modal covers the page. */
+  disabled?: boolean;
 }
 
 export const TVActorCard = React.forwardRef<ViewInstance, TVActorCardProps>(
-  ({ person, apiBasePath, onPress, hasTVPreferredFocus }, ref) => {
+  ({ person, apiBasePath, onPress, hasTVPreferredFocus, disabled }, ref) => {
     const typography = useScaledTVTypography();
     const { focused, handleFocus, handleBlur, animatedStyle } =
       useTVFocusAnimation();
@@ -34,7 +36,9 @@ export const TVActorCard = React.forwardRef<ViewInstance, TVActorCardProps>(
         onPress={onPress}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        hasTVPreferredFocus={hasTVPreferredFocus}
+        hasTVPreferredFocus={hasTVPreferredFocus && !disabled}
+        disabled={disabled}
+        focusable={!disabled}
       >
         <Animated.View
           style={[

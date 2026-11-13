@@ -1,4 +1,8 @@
-import type { BaseItemPerson } from "@jellyfin/sdk/lib/generated-client/models";
+import {
+  type BaseItemDto,
+  type BaseItemPerson,
+  PersonKind,
+} from "@jellyfin/sdk/lib/generated-client/models";
 
 /**
  * Person kinds that get a labelled credits line, in the order the lines are
@@ -104,4 +108,47 @@ export const mergePeopleById = (
     ...person,
     Role: roles.length > 0 ? roles.join(", ") : null,
   }));
+};
+
+/**
+ * The cast of a series: the actors the series itself credits, in its order and
+ * once each with all their roles, then every actor of its episodes it does
+ * not, in the order the server lists them.
+ *
+ * The series' own credits are what the metadata provider has for the show as a
+ * whole, which leaves out whoever left it: an anthology credits its latest
+ * seasons, and season 1's lead is credited on that season's episodes only.
+ *
+ * Actors only. The crew has the header's credit lines, and a guest star is the
+ * guest of one episode: a long series has hundreds, who would bury the
+ * regulars. Their episode's page lists them.
+ *
+ * `episodeActors` are people as `/Persons` answers them, items without a role.
+ */
+export const seriesCast = (
+  seriesPeople: BaseItemPerson[] | null | undefined,
+  episodeActors: BaseItemDto[] | null | undefined,
+): BaseItemPerson[] => {
+  const cast = mergePeopleById(
+    seriesPeople?.filter((person) => person.Type === PersonKind.Actor),
+    // Every one of them is an actor: the kind would say nothing a role does
+    // not, so an actor without a role is left without one.
+    () => "",
+  );
+  const listed = new Set(cast.map((person) => person.Id));
+
+  for (const person of episodeActors ?? []) {
+    if (!person.Id || listed.has(person.Id)) continue;
+    listed.add(person.Id);
+    cast.push({
+      Id: person.Id,
+      Name: person.Name,
+      Type: PersonKind.Actor,
+      Role: null,
+      PrimaryImageTag: person.ImageTags?.Primary ?? null,
+      ImageBlurHashes: person.ImageBlurHashes ?? null,
+    });
+  }
+
+  return cast;
 };

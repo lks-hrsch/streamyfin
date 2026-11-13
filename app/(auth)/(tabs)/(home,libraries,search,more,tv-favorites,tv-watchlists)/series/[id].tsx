@@ -22,6 +22,7 @@ import {
   SeasonPicker,
   seasonIndexAtom,
 } from "@/components/series/SeasonPicker";
+import { SeriesCast } from "@/components/series/SeriesCast";
 import { SeriesHeader } from "@/components/series/SeriesHeader";
 import { TVSeriesPage } from "@/components/series/TVSeriesPage";
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
@@ -43,6 +44,8 @@ import { isJellyfinItem, refetchUnlessItem } from "@/utils/jellyfin/jellyfin";
 import { getUserItemData } from "@/utils/jellyfin/user-library/getUserItemData";
 import { storage } from "@/utils/mmkv";
 import { getSeriesPlaybackTarget } from "@/utils/seriesPlaybackTarget";
+
+// The cast row is covered by components/series/seriesPage.test.tsx.
 
 // Height of the backdrop header, in layout points.
 const HEADER_HEIGHT = 400;
@@ -314,6 +317,11 @@ const page: React.FC = () => {
           )}
           {allEpisodes !== undefined && (
             <SeasonPicker item={item} initialSeasonIndex={initialSeasonIndex} />
+          )}
+          {/* Mounted with the season list, so its request goes out once the
+              page's own have answered. Offline it draws nothing. */}
+          {allEpisodes !== undefined && (
+            <SeriesCast item={item} className='mt-4' />
           )}
           {!isOffline && <SimilarItems item={item} className='mt-4' />}
         </View>
