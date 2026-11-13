@@ -47,15 +47,19 @@ jest.mock("@/components/tv/TVSeerrPosterCard", () => {
   };
 });
 jest.mock("@/components/common/ServerImage", () => ({ Image: () => null }));
-// The native search field and the Discover rows are not what is under test.
+// The native search field is not what is under test, nor what the Discover
+// rows draw: only whether they are there, and what they are given.
 jest.mock("@/modules/tv-search", () => ({ TvSearchView: () => null }));
+const mockTVDiscover = jest.fn();
 jest.mock("@/components/seerr/discover/TVDiscover", () => ({
-  TVDiscover: () => null,
+  TVDiscover: (props: unknown) => {
+    mockTVDiscover(props);
+    return null;
+  },
 }));
-jest.mock("./TVSeerrSearchResults", () => ({
-  TVSeerrSearchResults: () => null,
-}));
-jest.mock("./TVSearchTabBadges", () => ({ TVSearchTabBadges: () => null }));
+jest.mock("./TVSearchSortButtons", () => ({ TVSearchSortButtons: () => null }));
+
+beforeEach(() => mockTVDiscover.mockClear());
 
 const studio: BaseItemDto = { Id: "studio-1", Type: "Studio", Name: "Pixar" };
 const actor: BaseItemDto = { Id: "person-1", Type: "Person", Name: "Tom" };
@@ -76,9 +80,6 @@ const renderPage = async (
       noResults={false}
       onItemPress={onItemPress}
       onItemLongPress={onItemLongPress}
-      searchType='Library'
-      setSearchType={() => {}}
-      showDiscover={false}
       onSeerrResultPress={() => {}}
       {...results}
     />,
@@ -117,14 +118,14 @@ describe("TV search studios", () => {
   });
 });
 
-describe("TV search, what Seerr could add", () => {
-  const dune: MovieResult = {
-    id: 438631,
-    mediaType: MediaType.MOVIE,
-    title: "Dune",
-  };
-  const movie: BaseItemDto = { Id: "movie-1", Type: "Movie", Name: "Arrival" };
+const dune: MovieResult = {
+  id: 438631,
+  mediaType: MediaType.MOVIE,
+  title: "Dune",
+};
+const movie: BaseItemDto = { Id: "movie-1", Type: "Movie", Name: "Arrival" };
 
+describe("TV search, what Seerr could add", () => {
   test("lists it in a row after the library's results and opens it", async () => {
     const onSeerrResultPress = jest.fn();
     await renderPage({
@@ -161,17 +162,52 @@ describe("TV search, what Seerr could add", () => {
       screen.queryByText("seerr.library_search.not_in_your_library"),
     ).toBeNull();
   });
+});
 
-  // Discover lists Seerr's results itself, in rows of its own.
-  test("shows no row in Discover", async () => {
+// The page used to open on a Library tab with nothing under the search field,
+// Discover's rows one tab away.
+describe("TV search before anything is typed", () => {
+  const sliders = [
+    { id: 1, type: 1, order: 0, enabled: true, isBuiltIn: true },
+  ] as React.ComponentProps<typeof TVSearchPage>["discoverSliders"];
+
+  test("opens on Discover's rows", async () => {
     await renderPage({
-      searchType: "Discover",
-      showDiscover: true,
-      seerrNotInLibrary: [dune],
+      search: "",
+      debouncedSearch: "",
+      discoverSliders: sliders,
     });
 
+    expect(mockTVDiscover).toHaveBeenCalledWith(
+      expect.objectContaining({ sliders }),
+    );
+  });
+
+  // The rows come in after the page opened: a first card taking the focus
+  // then pulled it out of the search field the user is about to type in.
+  test("leaves the focus in the search field", async () => {
+    await renderPage({
+      search: "",
+      debouncedSearch: "",
+      discoverSliders: sliders,
+    });
+
+    expect(mockTVDiscover).toHaveBeenCalledWith(
+      expect.objectContaining({ claimsFocus: false }),
+    );
+  });
+
+  test("shows what the search found instead once something is typed", async () => {
+    await renderPage({
+      movies: [movie],
+      seerrNotInLibrary: [dune],
+      discoverSliders: sliders,
+    });
+
+    expect(mockTVDiscover).not.toHaveBeenCalled();
+    expect(screen.getByText(movie.Name as string)).toBeTruthy();
     expect(
-      screen.queryByText("seerr.library_search.not_in_your_library"),
-    ).toBeNull();
+      screen.getByText("seerr.library_search.not_in_your_library"),
+    ).toBeTruthy();
   });
 });

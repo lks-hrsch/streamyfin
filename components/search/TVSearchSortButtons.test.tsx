@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { Pressable, Text } from "react-native";
-import { TVSearchTabBadges } from "@/components/search/TVSearchTabBadges";
+import { TVSearchSortButtons } from "@/components/search/TVSearchSortButtons";
 
 jest.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -23,14 +23,14 @@ jest.mock("@/components/tv/TVFilterButton", () => ({
 
 const onSortPress = jest.fn();
 const onOrderPress = jest.fn();
-const sortButtons = {
+const sort = {
   sortValue: "Name",
   onSortPress,
   orderValue: "Ascending",
   onOrderPress,
 };
 
-describe("TVSearchTabBadges", () => {
+describe("TVSearchSortButtons", () => {
   beforeEach(() => {
     onSortPress.mockClear();
     onOrderPress.mockClear();
@@ -38,17 +38,9 @@ describe("TVSearchTabBadges", () => {
 
   // As the TV library page does: one button for the sort, one for the order,
   // each opening its sheet.
-  test("shows the sort and the order beside the tabs", async () => {
-    await render(
-      <TVSearchTabBadges
-        searchType='Library'
-        setSearchType={() => {}}
-        showDiscover
-        sortButtons={sortButtons}
-      />,
-    );
+  test("shows the sort and the order, each opening its sheet", async () => {
+    await render(<TVSearchSortButtons sort={sort} />);
 
-    expect(screen.getByText("|search.library")).toBeTruthy();
     await fireEvent.press(screen.getByText("library.filters.sort_by|Name"));
     expect(onSortPress).toHaveBeenCalled();
     await fireEvent.press(
@@ -57,44 +49,20 @@ describe("TVSearchTabBadges", () => {
     expect(onOrderPress).toHaveBeenCalled();
   });
 
-  // Without Seerr there are no tabs, but the Library results still sort.
-  test("shows the sort without the tabs when there is no Discover", async () => {
-    await render(
-      <TVSearchTabBadges
-        searchType='Library'
-        setSearchType={() => {}}
-        showDiscover={false}
-        sortButtons={sortButtons}
-      />,
-    );
+  // The search has one set of results now: no Library and Discover tabs
+  // beside the sort.
+  test("shows no tabs beside the sort", async () => {
+    await render(<TVSearchSortButtons sort={sort} />);
 
-    expect(screen.queryByText("|search.library")).toBeNull();
-    expect(screen.getByText("library.filters.sort_by|Name")).toBeTruthy();
+    expect(screen.queryByText(/search\.(library|discover)/)).toBeNull();
   });
 
   test("leaves the order out for a sort that has none", async () => {
     await render(
-      <TVSearchTabBadges
-        searchType='Library'
-        setSearchType={() => {}}
-        showDiscover
-        sortButtons={{ ...sortButtons, orderValue: undefined }}
-      />,
+      <TVSearchSortButtons sort={{ ...sort, orderValue: undefined }} />,
     );
 
     expect(screen.getByText("library.filters.sort_by|Name")).toBeTruthy();
     expect(screen.queryByText(/library\.filters\.sort_order/)).toBeNull();
-  });
-
-  test("shows nothing without Discover and without a search", async () => {
-    await render(
-      <TVSearchTabBadges
-        searchType='Library'
-        setSearchType={() => {}}
-        showDiscover={false}
-      />,
-    );
-
-    expect(screen.toJSON()).toBeNull();
   });
 });
