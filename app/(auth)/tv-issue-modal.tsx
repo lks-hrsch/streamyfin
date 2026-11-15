@@ -21,16 +21,13 @@ import { tvIssueModalAtom } from "@/utils/atoms/tvIssueModal";
 import { writeErrorLog } from "@/utils/log";
 import { scaleSize } from "@/utils/scaleSize";
 import { issueReport, issueSubject } from "@/utils/seerr/libraryIssue";
-import { IssueType, IssueTypeName } from "@/utils/seerr/types";
+import {
+  ISSUE_TYPES,
+  type IssueType,
+  IssueTypeName,
+} from "@/utils/seerr/types";
 import { store } from "@/utils/store";
 import { createSubmission } from "@/utils/submission";
-
-const ISSUE_TYPES = [
-  IssueType.VIDEO,
-  IssueType.AUDIO,
-  IssueType.SUBTITLES,
-  IssueType.OTHER,
-];
 
 /**
  * The TV's report issue sheet, as the phone's (a Seerr title's page, or a

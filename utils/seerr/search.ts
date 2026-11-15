@@ -1,8 +1,4 @@
-import {
-  type QueryClient,
-  queryOptions,
-  skipToken,
-} from "@tanstack/react-query";
+import { queryOptions, skipToken } from "@tanstack/react-query";
 import uniqBy from "lodash/uniqBy";
 import { SEERR_SEARCH_PAGES } from "@/constants/Seerr";
 import { SEERR_SEARCH_REUSE_MS } from "@/constants/SeerrLibrarySearch";
@@ -78,26 +74,24 @@ export type SeerrSearchApi = Pick<SeerrApi, "search"> & {
 };
 
 /**
- * Seerr's first pages for a text (searchSeerr), on one server. The address is
- * in the key because a server the plugin points the app at instead keeps the
- * session and the cache: nothing clears them, and the old server's results
- * would answer for the new one.
- */
-export const seerrSearchKey = (
-  api: SeerrSearchApi | undefined,
-  query: string,
-) =>
-  ["search", "seerr", "results", api?.axios.defaults.baseURL, query] as const;
-
-/**
- * The first of those pages on its own, cached under its own key: it is all
- * the library search asks for, since that one runs for every text typed, where
- * Discover's runs only once the user switches to it.
+ * Seerr's first page of results for a text, cached on its own: it is all the
+ * search asks for to list what Seerr could add, since it runs for every text
+ * typed. The address is in the key because a server the plugin points the app
+ * at instead keeps the session and the cache: nothing clears them, and the old
+ * server's results would answer for the new one.
  */
 export const seerrFirstPageKey = (
   api: SeerrSearchApi | undefined,
   query: string,
-) => [...seerrSearchKey(api, query), "first page"] as const;
+) =>
+  [
+    "search",
+    "seerr",
+    "results",
+    api?.axios.defaults.baseURL,
+    query,
+    "first page",
+  ] as const;
 
 export const seerrFirstPageQuery = (
   api: SeerrSearchApi | undefined,
@@ -107,47 +101,6 @@ export const seerrFirstPageQuery = (
     queryKey: seerrFirstPageKey(api, query),
     queryFn: api ? () => api.search({ query, page: 1 }) : skipToken,
     staleTime: SEERR_SEARCH_REUSE_MS,
-  });
-
-/**
- * Discover's search, one query for it on the phone (SeerrIndexPage) and on
- * the TV (the search page) alike. It starts from the first page the library
- * search already holds rather than asking Seerr for it again. When Discover
- * asks first, the page it fetched is left in the cache for the library search
- * the same way.
- *
- * The page is read and written rather than fetched through the cache: such a
- * fetch would run its own retries inside this query's, sixteen tries before
- * Discover gave up on a Seerr that is down, where this query alone makes four.
- */
-export const seerrSearchQuery = (
-  queryClient: QueryClient,
-  api: SeerrSearchApi | undefined,
-  query: string,
-) =>
-  queryOptions({
-    queryKey: seerrSearchKey(api, query),
-    queryFn: () =>
-      searchSeerr(
-        api && {
-          search: async (params) => {
-            if (params.page !== 1) return api.search(params);
-            const { queryKey } = seerrFirstPageQuery(api, params.query);
-            const cached = queryClient.getQueryState(queryKey);
-            if (
-              cached?.data &&
-              !cached.isInvalidated &&
-              Date.now() - cached.dataUpdatedAt < SEERR_SEARCH_REUSE_MS
-            ) {
-              return cached.data;
-            }
-            const page = await api.search(params);
-            queryClient.setQueryData(queryKey, page);
-            return page;
-          },
-        },
-        query,
-      ),
   });
 
 /**

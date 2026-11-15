@@ -88,12 +88,19 @@ const requestedSeasons = (details: TvDetails): Set<number> => {
 };
 
 /**
+ * Seasons the Jellyfin library holds every episode of, which Seerr may not
+ * have caught up with yet: it calls them available once its library scan has
+ * run. Only a page that knows the library passes them.
+ */
+export type HeldSeasons = ReadonlySet<number>;
+
+/**
  * The seasons that can be requested: those with episodes, the specials only
  * when the server shows them, and none that is requested or in the library.
  */
 export const unrequestedSeasons = (
   details: TvDetails,
-  { specials = false }: { specials?: boolean } = {},
+  { specials = false, held }: { specials?: boolean; held?: HeldSeasons } = {},
 ): number[] => {
   const requested = requestedSeasons(details);
 
@@ -102,7 +109,8 @@ export const unrequestedSeasons = (
       (season) =>
         season.episodeCount !== 0 &&
         (specials || season.seasonNumber > 0) &&
-        !requested.has(season.seasonNumber),
+        !requested.has(season.seasonNumber) &&
+        !held?.has(season.seasonNumber),
     )
     .map((season) => season.seasonNumber);
 };
@@ -186,11 +194,12 @@ export interface SeasonRow {
 /**
  * The rows of Seerr's season table (TvRequestModal): the seasons with
  * episodes, the specials only when the server shows them, each with the
- * badge Seerr gives it and whether it can still be chosen.
+ * badge Seerr gives it and whether it can still be chosen. A season the
+ * library holds is available, as Seerr will have it after its next scan.
  */
 export const seasonRows = (
   details: TvDetails,
-  { specials = false }: { specials?: boolean } = {},
+  { specials = false, held }: { specials?: boolean; held?: HeldSeasons } = {},
 ): SeasonRow[] => {
   const standing = (details.mediaInfo?.requests ?? []).filter(
     (request) =>
@@ -205,6 +214,14 @@ export const seasonRows = (
         season.episodeCount !== 0 && (specials || season.seasonNumber !== 0),
     )
     .map((season) => {
+      if (held?.has(season.seasonNumber)) {
+        return {
+          seasonNumber: season.seasonNumber,
+          episodeCount: season.episodeCount,
+          badge: "available" as const,
+          locked: true,
+        };
+      }
       const seasonRequest = standing
         .flatMap((request) => request.seasons ?? [])
         .find(

@@ -1,5 +1,6 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { renderHook } from "@testing-library/react-native";
+import { toast } from "sonner-native";
 import type {
   DownloadCompleteEvent,
   DownloadErrorEvent,
@@ -12,14 +13,6 @@ import { clearMmkv } from "@/test-utils/mmkv";
 
 // The pending records and the downloads database are real, over the MMKV double: together they
 // are what says whether a completed file belongs to anything.
-jest.mock(
-  "react-native-mmkv",
-  () => jest.requireActual("@/test-utils/mmkv").mmkvModule,
-);
-jest.mock(
-  "expo-file-system",
-  () => jest.requireActual("@/test-utils/fileSystem").fileSystemModule,
-);
 const mockListeners: {
   started?: (event: DownloadStartedEvent) => void;
   complete?: (event: DownloadCompleteEvent) => Promise<void>;
@@ -61,23 +54,13 @@ jest.mock("../notifications", () => ({
     mockGetNotificationContent(...(args as [])),
   sendDownloadNotification: () => mockSendDownloadNotification(),
 }));
-const mockToastError = jest.fn();
-const mockToastDismiss = jest.fn();
-jest.mock("sonner-native", () => ({
-  toast: {
-    error: (...args: unknown[]) => mockToastError(...args),
-    dismiss: (...args: unknown[]) => mockToastDismiss(...args),
-  },
-}));
-jest.mock("@/utils/log", () => ({
-  logAndCaptureError: jest.fn(),
-  writeToLog: jest.fn(),
-}));
-jest.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
+const mockToastError = jest.mocked(toast.error);
+const mockToastDismiss = jest.mocked(toast.dismiss);
 
-import { DOWNLOAD_FAILURE_TOAST_DURATION_MS } from "@/constants/Downloads";
+import {
+  DOWNLOAD_FAILURE_TOAST_DURATION_MS,
+  FAILED_DOWNLOAD_CARD_REMOVAL_DELAY_MS,
+} from "@/constants/Downloads";
 import { clearAllDownloadedItems, getDownloadedItemById } from "../database";
 import {
   finalizePendingDownload,
@@ -130,13 +113,13 @@ const started: DownloadStartedEvent = {
  */
 const listenerFor = async <K extends keyof typeof mockListeners>(
   name: K,
-  updateProcess = jest.fn(),
+  { removeProcess = jest.fn(), updateProcess = jest.fn() } = {},
 ) => {
   await renderHook(() =>
     useDownloadEventHandlers({
       processes: [],
       updateProcess,
-      removeProcess: jest.fn(),
+      removeProcess,
     }),
   );
   const listener = mockListeners[name];
@@ -268,6 +251,9 @@ describe("a download that starts", () => {
 // alone, and the card went away three seconds later.
 describe("a download that fails", () => {
   beforeEach(() => {
+    // The hook removes the card three seconds after a failure, on a timer the
+    // spec must not leave running: a pending one keeps the Jest worker alive.
+    jest.useFakeTimers();
     clearMmkv();
     fakeFiles.clear();
     mockGetNotificationContent.mockClear();
@@ -276,10 +262,29 @@ describe("a download that fails", () => {
     mockToastDismiss.mockClear();
   });
 
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
   const failed = (error: string): DownloadErrorEvent => ({
     taskId: 7,
     itemId: "item-1",
     error,
+  });
+
+  it("removes the failed download card after its delay", async () => {
+    savePendingDownload(record);
+    const removeProcess = jest.fn();
+    const error = await listenerFor("error", { removeProcess });
+
+    await error(failed("HTTP error: 404"));
+    expect(removeProcess).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(FAILED_DOWNLOAD_CARD_REMOVAL_DELAY_MS - 1);
+    expect(removeProcess).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    expect(removeProcess).toHaveBeenCalledTimes(1);
+    expect(removeProcess).toHaveBeenCalledWith("item-1");
   });
 
   it("tells the user the server could not convert it", async () => {
@@ -359,7 +364,7 @@ describe("a download that is interrupted", () => {
     savePendingDownload(record);
     const updateProcess = jest.fn();
 
-    (await listenerFor("paused", updateProcess))(paused);
+    (await listenerFor("paused", { updateProcess }))(paused);
 
     expect(getPendingDownload("item-1")).toMatchObject({
       status: "paused",
@@ -400,7 +405,7 @@ describe("a paused download that goes on", () => {
     savePendingDownload({ ...record, status: "paused" });
     const updateProcess = jest.fn();
 
-    (await listenerFor("resumed", updateProcess))(resumed);
+    (await listenerFor("resumed", { updateProcess }))(resumed);
 
     expect(getPendingDownload("item-1")).toMatchObject({
       status: "downloading",
@@ -419,7 +424,7 @@ describe("a paused download that goes on", () => {
     savePendingDownload({ ...record, status: "paused" });
     const updateProcess = jest.fn();
 
-    (await listenerFor("resumed", updateProcess))({
+    (await listenerFor("resumed", { updateProcess }))({
       ...resumed,
       resumed: true,
     });

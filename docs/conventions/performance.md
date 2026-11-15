@@ -21,7 +21,7 @@ bun run perf
 
 The target comes from `gh pr view`, the same fact CI uses. Without a PR it falls back to `develop`, looked up on `upstream` before `origin`. A branch stacked on another one should name its parent, so the parent's gains don't count as yours. The script prints the base it chose.
 
-The baseline is measured with the scenario files and `test-utils/` doubles your branch added or changed copied onto the base, so a new scenario has a baseline in the same PR that adds it, and a changed one is compared as the same test. A scenario that needs code only your branch has can't run on the base; it is reported and left without a baseline.
+The baseline is measured with the scenario files and `test-utils/` doubles your branch added or changed copied onto the base, so a new scenario has a baseline in the same PR that adds it, and a changed one is compared as the same test. A scenario that needs code only your branch has can't run on the base. The base is then measured with its own scenarios and doubles, as if nothing had been copied, and the PR comment says so: its numbers can move with your changes to the scenarios as well as with the code.
 
 The comparison is written to `.reassure/output.md`. The `.reassure/` folder is gitignored.
 
@@ -32,7 +32,7 @@ CI does the same on every PR that touches code the scenarios can reach (the `pat
 - Performance test scenario files are named `*.perf-test.tsx` and are colocated with the code they measure.
 - Name a scenario `.perf-test.tsx`, never `.perf.test.tsx`. Jest's default match skips `.perf-test.tsx`, so `bun run test:unit` never runs them. It would pick up `.perf.test.tsx` and run it as a unit test without the perf setup.
 - A screen under `app/` can't have its scenario next to it, because Expo Router turns every file there into a route. Put it next to the logic the screen uses instead, the same as unit tests (see [testing.md](testing.md)).
-- Both perf scripts run Jest with `jest.perf.config.js`, which is the unit config plus `test-utils/perfSetup.ts`.
+- Both perf scripts run Jest with `jest.perf.config.js`. It keeps the unit config's preset and transforms, maps none of its package doubles, and runs `test-utils/perfSetup.ts` in place of the unit setup file, so the scenarios measure the real modules.
 
 ## What the shared setup does
 
@@ -40,7 +40,8 @@ CI does the same on every PR that touches code the scenarios can reach (the `pat
 
 - The app's real i18n, so translated strings cost what they cost in the app.
 - Fake timers, with `performance` left real. React reads its render durations from `performance.now`, so faking it would make every duration zero.
-- Stubs for native modules and libraries that don't run in Jest: FlashList's measurements, MMKV, Reanimated, safe area insets, the bottom sheet, device info, toasts and the app's own native modules (`@/modules`).
+- `react-native`'s exports resolved once per spec file. Its index calls `require()` in a getter on every read, which in Jest runs the module resolver each time, a cost a device never pays. An export still resolves on its first read, so a scenario's `jest.mock` of a `react-native` module still applies.
+- Stubs for native modules and libraries that don't run in Jest: FlashList's measurements, MMKV, Reanimated, safe area insets, the bottom sheet, notifications, toasts and the app's own native modules (`@/modules`).
 - A recording router: `test-utils/expoRouter.ts` stands for `expo-router`, and its `router` holds the `push` and `replace` calls the real `useAppRouter` makes, so a scenario can assert them.
 - `@/utils/atoms/api` and a `JellyfinProvider` that re-exports it, whose `apiAtom` holds a `makeApi()` double from `test-utils/jellyfinApi.ts`, so you can answer API requests with `api.mock`.
 

@@ -10,11 +10,6 @@ import {
 import { useOfflineProgressSync } from "./useOfflineProgressSync";
 import type { PlaybackSyncResult } from "./useTwoWaySync";
 
-jest.mock(
-  "react-native-mmkv",
-  () => jest.requireActual("@/test-utils/mmkv").mmkvModule,
-);
-
 let mockServerConnected: boolean | null = false;
 let mockReachable = true;
 let mockUserId: string | undefined = "alice";
@@ -24,9 +19,10 @@ const T2 = "2026-11-05T11:00:00.000Z";
 let mockDownloaded = new Map<string, string>();
 let mockBasePath = "http://jellyfin.local";
 let mockBrokenRecord: string | undefined;
-const mockSync = jest.fn<Promise<PlaybackSyncResult>, [string]>(
-  async () => "pushed",
-);
+const mockSync = jest.fn<
+  Promise<PlaybackSyncResult>,
+  [string, { stamp?: string }?]
+>(async () => "pushed");
 const mockInvalidate = jest.fn(async () => {});
 
 // The probe, replaceable by one the test settles itself.
@@ -108,7 +104,7 @@ describe("useOfflineProgressSync", () => {
     await flush();
 
     expect(mockSync).toHaveBeenCalledTimes(1);
-    expect(mockSync).toHaveBeenCalledWith("episode-1");
+    expect(mockSync).toHaveBeenCalledWith("episode-1", { stamp: T1 });
     expect(getOfflineProgress("alice")).toEqual({});
     expect(mockInvalidate).toHaveBeenCalled();
   });
@@ -225,7 +221,7 @@ describe("useOfflineProgressSync", () => {
     await act(async () => listener?.("active"));
     await flush();
 
-    expect(mockSync).toHaveBeenCalledWith("episode-1");
+    expect(mockSync).toHaveBeenCalledWith("episode-1", { stamp: T1 });
     expect(getOfflineProgress("alice")).toEqual({});
   });
 
@@ -239,7 +235,7 @@ describe("useOfflineProgressSync", () => {
     await rerender({});
     await flush();
 
-    expect(mockSync).toHaveBeenCalledWith("episode-1");
+    expect(mockSync).toHaveBeenCalledWith("episode-1", { stamp: T1 });
   });
 
   // serverConnected defaults to true before the first probe: an offline cold
@@ -301,7 +297,7 @@ describe("useOfflineProgressSync", () => {
 
     await act(async () => finishFirst("pushed"));
     await flush();
-    expect(mockSync).toHaveBeenLastCalledWith("episode-2");
+    expect(mockSync).toHaveBeenLastCalledWith("episode-2", { stamp: T1 });
     expect(getOfflineProgress("alice")).toEqual({});
   });
 

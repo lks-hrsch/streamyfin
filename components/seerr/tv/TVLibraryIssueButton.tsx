@@ -1,14 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import type { ViewInstance } from "react-native";
 import { TVButton } from "@/components/tv/TVButton";
 import { useLibraryIssue } from "@/hooks/useLibraryIssue";
+import { useTVFocusRestore } from "@/hooks/useTVFocusRestore";
 import { useTVIssueModal } from "@/hooks/useTVIssueModal";
 import { scaleSize } from "@/utils/scaleSize";
-
-// Long enough for the sheet's route to have left the screen.
-const FOCUS_RESTORE_DELAY_MS = 300;
 
 interface Props {
   item: BaseItemDto;
@@ -23,10 +21,7 @@ export function TVLibraryIssueButton({ item }: Props) {
   const target = useLibraryIssue(item);
   const { showIssueModal } = useTVIssueModal();
   const button = useRef<ViewInstance | null>(null);
-  const focusTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-  useEffect(() => () => clearTimeout(focusTimer.current), []);
+  const restoreFocusTo = useTVFocusRestore();
 
   const setButton = useCallback((ref: ViewInstance | null) => {
     button.current = ref;
@@ -35,17 +30,8 @@ export function TVLibraryIssueButton({ item }: Props) {
   // A closed sheet leaves Android TV with nothing focused, and the next Back
   // would leave the page: the button that opened it takes the focus back.
   const restoreFocus = useCallback(() => {
-    clearTimeout(focusTimer.current);
-    focusTimer.current = setTimeout(
-      () =>
-        (
-          button.current as
-            | (ViewInstance & { requestTVFocus?: () => void })
-            | null
-        )?.requestTVFocus?.(),
-      FOCUS_RESTORE_DELAY_MS,
-    );
-  }, []);
+    restoreFocusTo(() => button.current);
+  }, [restoreFocusTo]);
 
   if (!target) return null;
   return (

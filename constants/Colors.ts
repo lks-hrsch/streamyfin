@@ -1,4 +1,5 @@
 import type { SeerrStatusTone } from "@/utils/seerr/statusBadge";
+import { MediaStatus } from "@/utils/seerr/types";
 
 export const Colors = {
   primary: "#9334E9",
@@ -25,6 +26,17 @@ export const TV_PANEL_BACKING = "rgba(18, 18, 20, 0.96)";
 export const TV_SKELETON = "#262626";
 
 /**
+ * Text on a TV page, over its dark backdrop: what is read first in white, a
+ * heading over a group a little dimmer, and what stands beside a value
+ * dimmer still.
+ */
+export const TVTextColors = {
+  primary: "#FFFFFF",
+  heading: "rgba(255, 255, 255, 0.7)",
+  secondary: "rgba(255, 255, 255, 0.6)",
+} as const;
+
+/**
  * What a Seerr status reads as wherever it is spelled out: available in
  * green, pending in amber, requested (approved and on its way) in indigo.
  */
@@ -33,6 +45,18 @@ export const SeerrStatusColors = {
   pending: "#f59e0b",
   requested: "#818cf8",
 } as const;
+
+/**
+ * A season that stands somewhere on Seerr, by the status its icon draws
+ * (seasonRowStatus): the request sheets' seasons and the series page's
+ * missing ones alike. A status not listed has no colour of its own.
+ */
+export const SeerrSeasonStatusColors: Partial<Record<MediaStatus, string>> = {
+  [MediaStatus.PENDING]: SeerrStatusColors.pending,
+  [MediaStatus.PROCESSING]: SeerrStatusColors.requested,
+  [MediaStatus.PARTIALLY_AVAILABLE]: SeerrStatusColors.available,
+  [MediaStatus.AVAILABLE]: SeerrStatusColors.available,
+};
 
 /** Seerr's badges (its Badge): each tone's fill, edge and text. */
 export const SeerrBadgeColors = {
@@ -105,6 +129,9 @@ export const SeerrStatusBadgeColors: Record<SeerrStatusTone, string> = {
   blocklisted: "#ef4444",
   request: "#16a34a",
 };
+
+/** A TV badge's circle where Seerr draws no badge: a quiet one, not a tone. */
+export const SEERR_TV_NO_BADGE = "rgba(255, 255, 255, 0.2)";
 
 /** Seerr's type badge over a poster: a film in blue, a series in purple. */
 export const SeerrMediaBadgeColors = {

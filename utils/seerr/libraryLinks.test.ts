@@ -1,4 +1,5 @@
 import {
+  libraryItemOf,
   missingCollectionParts,
   opensSeerrPages,
   seerrCollectionIdOf,
@@ -121,5 +122,46 @@ describe("missingCollectionParts", () => {
       missingCollectionParts([film(11, MediaStatus.AVAILABLE)], []),
     ).toEqual([]);
     expect(missingCollectionParts(undefined, [])).toEqual([]);
+  });
+});
+
+describe("libraryItemOf", () => {
+  const credit = (
+    mediaType: MediaType,
+    status: MediaStatus | undefined,
+    jellyfinMediaId?: string | null,
+  ) => ({ id: 1, mediaType, mediaInfo: { status, jellyfinMediaId } });
+
+  test("is the film or the series Seerr has found in Jellyfin", () => {
+    expect(
+      libraryItemOf(credit(MediaType.MOVIE, MediaStatus.AVAILABLE, "jf-1")),
+    ).toEqual({ Id: "jf-1", Type: "Movie" });
+    expect(
+      libraryItemOf(
+        credit(MediaType.TV, MediaStatus.PARTIALLY_AVAILABLE, "jf-2"),
+      ),
+    ).toEqual({ Id: "jf-2", Type: "Series" });
+  });
+
+  // Seerr keeps a deleted title's id while it is fetched again, and a request
+  // for it moves it to processing: the item behind the id is gone.
+  test.each([
+    MediaStatus.DELETED,
+    MediaStatus.PROCESSING,
+    MediaStatus.PENDING,
+    MediaStatus.UNKNOWN,
+    undefined,
+  ])("is none for a title Seerr reports as %s", (status) => {
+    expect(libraryItemOf(credit(MediaType.MOVIE, status, "jf-1"))).toBe(
+      undefined,
+    );
+  });
+
+  test("is none without a Jellyfin id, or without a credit", () => {
+    expect(
+      libraryItemOf(credit(MediaType.MOVIE, MediaStatus.AVAILABLE, null)),
+    ).toBe(undefined);
+    expect(libraryItemOf({ mediaType: MediaType.MOVIE })).toBe(undefined);
+    expect(libraryItemOf(undefined)).toBe(undefined);
   });
 });

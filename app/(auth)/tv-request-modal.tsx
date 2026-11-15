@@ -342,7 +342,7 @@ export default function TVRequestModalPage() {
       seasonTitle ? `${modalState.title}, ${seasonTitle}` : modalState.title,
       body,
       () => {
-        modalState.onRequested();
+        modalState.onRequested?.();
         if (submission.dismiss()) router.back();
       },
     );

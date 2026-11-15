@@ -14,10 +14,10 @@ import React, {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Dimensions,
   ScrollView,
   type ScrollViewInstance,
   TVFocusGuideView,
+  useWindowDimensions,
   View,
   type ViewInstance,
 } from "react-native";
@@ -25,19 +25,29 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ItemImage } from "@/components/common/ItemImage";
 import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
+import {
+  TVSeerrMissingSeasons,
+  TVSeerrRequestSeasonsButton,
+} from "@/components/seerr/tv/TVSeerrMissingSeasons";
 import { episodeRowState } from "@/components/series/episodeRowState";
 import { seasonIndexAtom } from "@/components/series/SeasonPicker";
 import { TVEpisodeList } from "@/components/series/TVEpisodeList";
+import { TVSeriesCast } from "@/components/series/TVSeriesCast";
 import { TVSeriesHeader } from "@/components/series/TVSeriesHeader";
 import { TVSimilarItems } from "@/components/TVSimilarItems";
 import { TVButton } from "@/components/tv/TVButton";
 import { TVCastCrewText } from "@/components/tv/TVCastCrewText";
 import { TVFavoriteButton } from "@/components/tv/TVFavoriteButton";
+import {
+  TV_DETAIL_HEADER_MIN_HEIGHT_RATIO,
+  TV_DETAIL_POSTER_WIDTH_RATIO,
+} from "@/constants/TVDetailLayout";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import useRouter from "@/hooks/useAppRouter";
 import { useShuffleQueue } from "@/hooks/useShuffleQueue";
 import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
 import { useTVOptionModal } from "@/hooks/useTVOptionModal";
+import { useTVSeerrMissingSeasons } from "@/hooks/useTVSeerrMissingSeasons";
 import { useTVSeriesSeasonModal } from "@/hooks/useTVSeriesSeasonModal";
 import { useTVThemeMusic } from "@/hooks/useTVThemeMusic";
 import { useDownload } from "@/providers/DownloadProvider";
@@ -47,6 +57,7 @@ import type { TVOptionItem } from "@/utils/atoms/tvOptionModal";
 import { tvSeriesSeasonModalAtom } from "@/utils/atoms/tvSeriesSeasonModal";
 import {
   buildOfflineSeasons,
+  downloadsKeyPart,
   getDownloadedEpisodesForSeason,
 } from "@/utils/downloads/offline-series";
 import { scaleSize } from "@/utils/scaleSize";
@@ -54,11 +65,8 @@ import { seasonHeading, seasonLabel } from "@/utils/seasonLabel";
 import { replacementSeason } from "@/utils/seasonSelection";
 import { getSeriesPlaybackTarget } from "@/utils/seriesPlaybackTarget";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-
 const HORIZONTAL_PADDING = scaleSize(80);
 const TOP_PADDING = scaleSize(140);
-const POSTER_WIDTH_PERCENT = 0.22;
 const SCALE_PADDING = scaleSize(20);
 
 interface TVSeriesPageProps {
@@ -71,20 +79,25 @@ interface TVSeriesPageProps {
 
 export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   item,
+  // The episodes as given too, undefined while they load or when they could
+  // not: Seerr's list waits for them rather than taking none for an empty
+  // library.
+  allEpisodes: knownEpisodes,
   allEpisodes = [],
-  isLoading: _isLoading,
+  isLoading,
   initialSeasonIndex,
 }) => {
   const typography = useScaledTVTypography();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const router = useRouter();
   const segments = useSegments();
   const from = (segments as string[])[2] || "(home)";
   const isOffline = useOfflineMode();
   const [api] = useAtom(apiAtom);
   const [user] = useAtom(userAtom);
-  const { getDownloadedItems, downloadedItems } = useDownload();
+  const { getDownloadedItems, refreshKey } = useDownload();
   const { showSeasonModal } = useTVSeriesSeasonModal();
   const { showItemActions } = useTVItemActionModal();
   const { startShuffle } = useShuffleQueue();
@@ -102,6 +115,14 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   const [playButtonRef, setPlayButtonRef] = useState<ViewInstance | null>(null);
   const [firstEpisodeRef, setFirstEpisodeRef] = useState<ViewInstance | null>(
     null,
+  );
+
+  // Nothing to ask Seerr offline. Play takes the focus back from the request
+  // sheet when the request left nothing to ask for, and its button with it.
+  const seerr = useTVSeerrMissingSeasons(
+    isOffline ? undefined : item,
+    knownEpisodes,
+    playButtonRef,
   );
 
   // ScrollView ref for page scrolling
@@ -126,7 +147,12 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
 
   // Fetch seasons
   const seasonsQuery = useQuery({
-    queryKey: ["seasons", item.Id, isOffline, downloadedItems.length],
+    queryKey: [
+      "seasons",
+      item.Id,
+      isOffline,
+      downloadsKeyPart(isOffline, refreshKey),
+    ],
     queryFn: async () => {
       if (isOffline) {
         return buildOfflineSeasons(getDownloadedItems(), item.Id!);
@@ -200,7 +226,7 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
       item.Id,
       isOffline ? selectedSeasonNumber : selectedSeasonId,
       isOffline,
-      downloadedItems.length,
+      downloadsKeyPart(isOffline, refreshKey),
     ],
     queryFn: async () => {
       if (isOffline) {
@@ -437,17 +463,19 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
         <View
           style={{
             flexDirection: "row",
-            minHeight: SCREEN_HEIGHT * 0.45,
+            minHeight: windowHeight * TV_DETAIL_HEADER_MIN_HEIGHT_RATIO,
           }}
         >
           {/* Left side - Content */}
           <View style={{ flex: 1, justifyContent: "center" }}>
             <TVSeriesHeader item={item} />
 
-            {/* Action buttons */}
+            {/* Action buttons. Wrapped: with Seerr's request beside them, the
+                row can outgrow the column the poster leaves. */}
             <View
               style={{
                 flexDirection: "row",
+                flexWrap: "wrap",
                 gap: scaleSize(16),
                 marginTop: scaleSize(32),
               }}
@@ -525,13 +553,26 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
               )}
 
               <TVFavoriteButton item={item} disabled={isSeasonModalVisible} />
+
+              {seerr.offersRequest && (
+                <TVSeerrRequestSeasonsButton
+                  onPress={seerr.requestSeasons}
+                  disabled={isSeasonModalVisible}
+                  refSetter={seerr.setButtonRef}
+                />
+              )}
             </View>
+
+            <TVSeerrMissingSeasons
+              seasons={seerr.seasons}
+              offersRequest={seerr.offersRequest}
+            />
           </View>
 
           {/* Right side - Poster */}
           <View
             style={{
-              width: SCREEN_WIDTH * POSTER_WIDTH_PERCENT,
+              width: windowWidth * TV_DETAIL_POSTER_WIDTH_RATIO,
               marginLeft: scaleSize(50),
             }}
           >
@@ -605,6 +646,19 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
             horizontalPadding={HORIZONTAL_PADDING}
           />
         </View>
+
+        {/* The cast, as movies and episodes have it. Mounted once the
+            series' episodes are in, so its request goes out after the
+            page's own. Offline it draws nothing. */}
+        {!isLoading && (
+          <TVSeriesCast
+            item={item}
+            onPersonPress={handlePersonPress}
+            disabled={isSeasonModalVisible}
+            horizontalPadding={HORIZONTAL_PADDING}
+            titleInset={SCALE_PADDING}
+          />
+        )}
 
         {/* Credits lines - creators, directors, writers */}
         <TVCastCrewText

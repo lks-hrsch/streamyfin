@@ -131,4 +131,28 @@ describe("buildReport", () => {
     expect(report).toContain("`504d396` → `468d331`");
     expect(report).not.toContain("HEAD");
   });
+
+  describe("when the base ran its own scenarios", () => {
+    const measured = output({
+      metadata: { baseline: { commitHash: "504d3965aaaa" } },
+    });
+
+    // The comment used to read like any other, while base and PR had run
+    // different scenarios and doubles; only the job log had the warning.
+    it("says so", () => {
+      expect(buildReport(measured, "504d3965aaaa")).toContain(
+        "measured with its own scenarios",
+      );
+    });
+
+    it("says nothing without a note", () => {
+      expect(buildReport(measured)).not.toContain("its own scenarios");
+    });
+
+    it("ignores a note written for another base", () => {
+      expect(buildReport(measured, "1ba2d772bbbb")).not.toContain(
+        "its own scenarios",
+      );
+    });
+  });
 });

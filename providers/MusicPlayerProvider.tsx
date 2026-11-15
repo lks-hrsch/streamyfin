@@ -11,6 +11,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -194,9 +195,46 @@ export const useMusicPlayer = () => {
   return context;
 };
 
+/**
+ * What a track list needs from the player: the track playing or loading, and
+ * how to start playback. It leaves the position out: that changes every second
+ * while a track plays, and every row reading the whole player re-rendered with
+ * it.
+ */
+type MusicPlayerTrackContextType = Pick<
+  MusicPlayerContextType,
+  "currentTrack" | "isPlaying" | "loadingTrackId" | "playTrack" | "playQueue"
+>;
+
+const MusicPlayerTrackContext = createContext<
+  MusicPlayerTrackContextType | undefined
+>(undefined);
+
+/**
+ * The player as a track row or a track list page sees it. Read this rather
+ * than useMusicPlayer() in anything rendered once per track.
+ */
+export const useMusicPlayerTrack = () => {
+  const context = useContext(MusicPlayerTrackContext);
+  if (!context) {
+    throw new Error(
+      "useMusicPlayerTrack must be used within MusicPlayerProvider",
+    );
+  }
+  return context;
+};
+
 interface MusicPlayerProviderProps {
   children: ReactNode;
 }
+
+const tvTrackValue: MusicPlayerTrackContextType = {
+  currentTrack: null,
+  isPlaying: false,
+  loadingTrackId: null,
+  playTrack: noop,
+  playQueue: noop,
+};
 
 // Stub provider for tvOS - music playback is not supported
 const TVMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
@@ -236,7 +274,9 @@ const TVMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
 
   return (
     <MusicPlayerContext.Provider value={value}>
-      {children}
+      <MusicPlayerTrackContext.Provider value={tvTrackValue}>
+        {children}
+      </MusicPlayerTrackContext.Provider>
     </MusicPlayerContext.Provider>
   );
 };
@@ -575,7 +615,10 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     trackMediaInfoMap: {},
   });
 
-  useEffect(() => {
+  // A layout effect, so the ref holds the position the screen shows from the
+  // commit on: playTrack and playQueue read it in place of state.progress, and
+  // a tap can land before the passive effects of that commit have run.
+  useLayoutEffect(() => {
     progressRef.current = state.progress;
   }, [state.progress]);
 
@@ -1235,12 +1278,15 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     ],
   );
 
+  // playTrack and playQueue read the position from the ref, not from state:
+  // depending on state.progress would make them new on every progress update,
+  // and with them the track context every row of a list reads.
   const playTrack = useCallback(
     (track: BaseItemDto, queue?: BaseItemDto[]) => {
       if (state.currentTrack && state.playSessionId) {
         reportPlaybackStopped(
           state.currentTrack,
-          state.progress * 10000000,
+          progressRef.current * 10000000,
           state.playSessionId,
         );
       }
@@ -1252,7 +1298,6 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     [
       state.currentTrack,
       state.playSessionId,
-      state.progress,
       reportPlaybackStopped,
       loadAndPlayQueue,
     ],
@@ -1265,7 +1310,7 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
       if (state.currentTrack && state.playSessionId) {
         reportPlaybackStopped(
           state.currentTrack,
-          state.progress * 10000000,
+          progressRef.current * 10000000,
           state.playSessionId,
         );
       }
@@ -1298,7 +1343,6 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     [
       state.currentTrack,
       state.playSessionId,
-      state.progress,
       state.shuffleEnabled,
       reportPlaybackStopped,
       loadAndPlayQueue,
@@ -2274,9 +2318,28 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     ],
   );
 
+  const trackValue = useMemo(
+    () => ({
+      currentTrack: state.currentTrack,
+      isPlaying: state.isPlaying,
+      loadingTrackId: state.loadingTrackId,
+      playTrack,
+      playQueue,
+    }),
+    [
+      state.currentTrack,
+      state.isPlaying,
+      state.loadingTrackId,
+      playTrack,
+      playQueue,
+    ],
+  );
+
   return (
     <MusicPlayerContext.Provider value={value}>
-      {children}
+      <MusicPlayerTrackContext.Provider value={trackValue}>
+        {children}
+      </MusicPlayerTrackContext.Provider>
     </MusicPlayerContext.Provider>
   );
 };

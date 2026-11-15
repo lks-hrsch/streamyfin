@@ -31,18 +31,13 @@ jest.mock("@expo/ui/swift-ui", () => {
     ),
   };
 });
+// The modifiers stand in as strings, so a spec can read which ones a Menu got.
 jest.mock("@expo/ui/swift-ui/modifiers", () => ({
   disabled: jest.fn(),
   menuOrder: (order: string) => `menuOrder:${order}`,
   menuStyle: (style: string) => `menuStyle:${style}`,
   buttonStyle: (style: string) => `buttonStyle:${style}`,
   menuIndicator: (visibility: string) => `menuIndicator:${visibility}`,
-}));
-jest.mock("@gorhom/bottom-sheet", () =>
-  jest.requireActual("@gorhom/bottom-sheet/mock"),
-);
-jest.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
 }));
 jest.mock("@/providers/GlobalModalProvider", () => ({
   useGlobalModal: () => ({

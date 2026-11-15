@@ -16,10 +16,6 @@ beforeAll(() => {
   require("@/i18n");
 });
 
-jest.mock(
-  "react-native-mmkv",
-  () => jest.requireActual("@/test-utils/mmkv").mmkvModule,
-);
 // Loading the real module logs an Expo Go push warning on import.
 jest.mock("expo-notifications", () => ({
   scheduleNotificationAsync: jest.fn(),
@@ -30,6 +26,12 @@ jest.mock("sonner-native", () => ({
 jest.mock(
   "react-native-safe-area-context",
   () => jest.requireActual("react-native-safe-area-context/jest/mock").default,
+);
+// MMKV is native. `jest.perf.config.js` maps none of the unit doubles, so this
+// is the scenarios' only one, on the PR and on the baseline alike.
+jest.mock(
+  "react-native-mmkv",
+  () => jest.requireActual("@/test-utils/mmkv").mmkvModule,
 );
 jest.mock(
   "react-native-reanimated",
@@ -71,6 +73,36 @@ jest.mock("@/modules", () => {
     },
   };
 });
+
+// react-native's index exports each API through a getter that calls require()
+// on every read, and a render reads View, Text, Platform or StyleSheet over and
+// over. On a device that require is a lookup by module id; in Jest 30 it runs
+// the module resolver again each time, and that was most of the time
+// MusicPlayer's render phase gained with SDK 58, a cost no device pays. Each
+// getter keeps its first answer for the rest of the spec file. That answer is
+// still taken on first read, after the spec's own mocks, so a jest.mock of a
+// react-native module still reaches the export.
+const reactNative = jest.requireActual<object>("react-native");
+for (const [name, descriptor] of Object.entries(
+  Object.getOwnPropertyDescriptors(reactNative),
+)) {
+  const resolve = descriptor.get;
+  if (!resolve || !descriptor.configurable) continue;
+  let resolved = false;
+  let value: unknown;
+  Object.defineProperty(reactNative, name, {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get() {
+      if (!resolved) {
+        // Set after the call: an export whose getter throws keeps throwing.
+        value = resolve.call(reactNative);
+        resolved = true;
+      }
+      return value;
+    },
+  });
+}
 
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ["performance"] });

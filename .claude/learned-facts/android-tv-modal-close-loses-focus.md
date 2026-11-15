@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-09
 **Category**: tv
-**Key files**: `components/library/TVLibraryToolbar.tsx`, `components/library/TVLibrarySheet.tsx`
+**Key files**: `hooks/useTVFocusRestore.ts`, `components/library/TVLibraryToolbar.tsx`, `components/library/TVLibrarySheet.tsx`
 
 ## Detail
 
@@ -13,7 +13,10 @@ it leaves the screen. Seen with a real D-pad (`adb shell input keyevent`) on
 the library sheets; tvOS was only driven without a remote and is unverified.
 
 The page asks for the focus itself: the sheet's `onClose` sets a focus request
-and the toolbar calls `requestTVFocus()` on the opening button after 300 ms.
+and the toolbar asks for the opening button through `useTVFocusRestore()`,
+which calls `requestTVFocus()` once the route has left
+(`TVSheetTiming.focusRestoreMs`, 300 ms). The TV issue button and the series
+page's Seerr season request hand the focus back through the same hook.
 
 Two more Android TV traps from the same work:
 

@@ -1,6 +1,11 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { tmdbIdOf } from "./jellyfinBridge";
-import { MediaStatus, type MovieResult } from "./types";
+import {
+  type MediaInfo,
+  MediaStatus,
+  MediaType,
+  type MovieResult,
+} from "./types";
 
 /**
  * The phone tabs a Seerr page opens in. The Seerr posters draw nothing in any
@@ -55,4 +60,37 @@ export const missingCollectionParts = (
     (part) =>
       part.mediaInfo?.status !== MediaStatus.AVAILABLE && !held.has(part.id),
   );
+};
+
+/**
+ * The Jellyfin item a Seerr title is, when Seerr has found it in the library:
+ * a card for it opens that item's page, where it plays, as a library card
+ * does, and not Seerr's page, which can only request it.
+ *
+ * Only while Seerr reports it there, in full or in part. Seerr keeps a deleted
+ * title's id while the title is fetched again, and that id names an item
+ * Jellyfin no longer has. A later request leaves an available title's status
+ * as it is, so a series with a season on its way still opens.
+ */
+export const libraryItemOf = (
+  title:
+    | {
+        mediaType?: MediaType | string;
+        mediaInfo?: Partial<Pick<MediaInfo, "jellyfinMediaId" | "status">>;
+      }
+    | null
+    | undefined,
+): Pick<BaseItemDto, "Id" | "Type"> | undefined => {
+  const id = title?.mediaInfo?.jellyfinMediaId;
+  const status = title?.mediaInfo?.status;
+  if (
+    !id ||
+    (status !== MediaStatus.AVAILABLE &&
+      status !== MediaStatus.PARTIALLY_AVAILABLE)
+  ) {
+    return undefined;
+  }
+  if (title?.mediaType === MediaType.MOVIE) return { Id: id, Type: "Movie" };
+  if (title?.mediaType === MediaType.TV) return { Id: id, Type: "Series" };
+  return undefined;
 };

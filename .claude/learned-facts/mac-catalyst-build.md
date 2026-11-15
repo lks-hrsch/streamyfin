@@ -81,8 +81,9 @@ first; they are not cosmetic:
   header config on `viewDidAppear`, Catalyst only.
 - **The toolbar draws header pills at a fixed 36pt height.** A lone glyph button came out as
   a standing capsule; `HeaderButton` pads a lone icon to that height on the Mac.
-- **SwiftUI's glass and glass-prominent button styles look alike on the Mac**, so the search
-  screen's Library/Discover toggle showed no selection; it uses plain pills there.
+- **SwiftUI's glass and glass-prominent button styles look alike on the Mac**, so a selected
+  glass-prominent button shows no selection there (the search screen's former Library/Discover
+  toggle did); use plain pills on the Mac for anything that marks a selection.
 - **Locally signed builds have no Keychain.** Signed with a personal team, the Mac build gets no
   `application-identifier` entitlement, so `expo-secure-store` fails with "A required
   entitlement is not present" (stored passwords, the Seerr sign-in fallback). A build signed

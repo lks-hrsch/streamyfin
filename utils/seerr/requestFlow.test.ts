@@ -170,23 +170,54 @@ describe("sendSeerrRequest, the same request twice", () => {
 
 describe("endsSeerrSession", () => {
   test("ends it on a read refused", () => {
-    expect(endsSeerrSession(403, "get", "/api/v1/discover/movies")).toBe(true);
-    expect(endsSeerrSession(403, undefined, "/api/v1/auth/me")).toBe(true);
+    expect(endsSeerrSession(403, "get", "/api/v1/discover/movies", false)).toBe(
+      true,
+    );
+    expect(endsSeerrSession(403, undefined, "/api/v1/auth/me", false)).toBe(
+      true,
+    );
   });
 
   test("keeps it when an action is refused", () => {
-    expect(endsSeerrSession(403, "post", "/api/v1/request")).toBe(false);
-    expect(endsSeerrSession(403, "put", "/api/v1/request/7")).toBe(false);
+    expect(endsSeerrSession(403, "post", "/api/v1/request", false)).toBe(false);
+    expect(endsSeerrSession(403, "put", "/api/v1/request/7", false)).toBe(
+      false,
+    );
   });
 
   // Another user's request, read without Manage Requests.
   test("keeps it when a request's own detail is refused", () => {
-    expect(endsSeerrSession(403, "get", "/api/v1/request/42")).toBe(false);
+    expect(endsSeerrSession(403, "get", "/api/v1/request/42", false)).toBe(
+      false,
+    );
+  });
+
+  // Seerr answers 401 ("cookie 'connect.sid' required") to a request that
+  // carries no session cookie at all, which left Discover and search empty
+  // for good while the stored Seerr user kept the app "signed in".
+  test("ends it on a request sent without a session", () => {
+    expect(
+      endsSeerrSession(401, "get", "/api/v1/settings/discover", false),
+    ).toBe(true);
+    expect(endsSeerrSession(401, "get", "/api/v1/search", false)).toBe(true);
+    expect(endsSeerrSession(401, "post", "/api/v1/request", false)).toBe(true);
+    // Who is signed in: its 401 tells most plainly that no one is.
+    expect(endsSeerrSession(401, "get", "/api/v1/auth/me", false)).toBe(true);
+  });
+
+  // A wrong password, or Quick Connect not approved yet.
+  test("keeps it when signing in is refused", () => {
+    expect(endsSeerrSession(401, "post", "/api/v1/auth/jellyfin", true)).toBe(
+      false,
+    );
   });
 
   test("keeps it for any other answer", () => {
-    expect(endsSeerrSession(401, "get", "/api/v1/discover/movies")).toBe(false);
-    expect(endsSeerrSession(500, "get", "/api/v1/discover/movies")).toBe(false);
-    expect(endsSeerrSession(undefined, "get", "/api/v1/status")).toBe(false);
+    expect(endsSeerrSession(500, "get", "/api/v1/discover/movies", false)).toBe(
+      false,
+    );
+    expect(endsSeerrSession(undefined, "get", "/api/v1/status", false)).toBe(
+      false,
+    );
   });
 });
