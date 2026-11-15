@@ -35,9 +35,12 @@ final class NativePlayerViewController: UIViewController {
 	private var cancellables: Set<AnyCancellable> = []
 	private var isViewVisible = false
 	#if os(tvOS)
-	/// Whether the current pan gesture is driving the scrub (a pan that
-	/// merely revealed hidden chrome must not).
-	private var panIsScrubbing = false
+	/// Decides whether the current clickpad pan is a swipe at all, or the
+	/// thumb resting, settling or making a press (see TVRemotePanGate).
+	private var remotePan = TVRemotePanGate()
+	/// Set by pressesBegan when a Play/Pause press's own roll armed the scrub
+	/// in progress; handlePlayPausePress takes the scrub back at the release.
+	private var playPauseTakesBackScrub = false
 	/// All transport recognizers — disabled while the options panel is open
 	/// so SwiftUI focus owns the remote (a recognizer that fires on .select
 	/// would otherwise eat the press before the focused Button gets it).
@@ -614,7 +617,12 @@ final class NativePlayerViewController: UIViewController {
 	}
 
 	@objc private func handlePlayPausePress() {
-		if viewModel.isScrubbing {
+		if playPauseTakesBackScrub {
+			// The scrub was this press's own roll (pressesBegan): it pauses or
+			// plays from where playback stood before it, and seeks nowhere.
+			playPauseTakesBackScrub = false
+			viewModel.takeBackScrubForPlayPause()
+		} else if viewModel.isScrubbing {
 			// An armed scrub outranks an active segment: a scrub armed inside
 			// an intro must commit its target, not skip the intro.
 			// Play/Pause on an armed scrub means "jump there and play" even
@@ -684,59 +692,120 @@ final class NativePlayerViewController: UIViewController {
 	// Select/Play to commit, Menu to abandon — viewModel.beginScrub already
 	// pauses, endScrub seeks and resumes)
 
-	/// Seconds moved per pan point at rest — a slow drag gives fine control.
-	private static let panBaseSecondsPerPoint: Double = 0.05
-	/// Finger velocity (points/sec) at which acceleration reaches 2x base.
-	private static let panAccelerationReferenceVelocity: Double = 1000
-	/// Curve exponent: >1 keeps slow drags fine and rewards hard flicks.
-	private static let panAccelerationPower: Double = 1.5
-	/// Acceleration ceiling so a violent flick can't cross a whole film.
-	private static let panMaxSecondsPerPoint: Double = 1.0
+	/// Every press the thumb makes (isThumbPress) reaches the gate before its
+	/// recognizer acts on the release: a pan the thumb made while pressing
+	/// stops there, and a scrub it armed a moment before is cancelled, so
+	/// Play/Pause pauses where the video was instead of committing that
+	/// scrub. super keeps the responder chain as it was.
+	override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+		guard Self.isThumbPress(presses) else {
+			super.pressesBegan(presses, with: event)
+			return
+		}
+		playPauseTakesBackScrub = false
+		switch remotePan.pressBegan(at: CACurrentMediaTime()) {
+		case .cancelScrub:
+			TVFocusLog.log.info("remote pan: scrub armed by the press's own roll, cancelled")
+			guard viewModel.isScrubbing else { break }
+			if presses.contains(where: { $0.type == .playPause }) {
+				// Taken back at the release instead (handlePlayPausePress):
+				// cancelled now, its resume would race the press's own toggle.
+				playPauseTakesBackScrub = true
+			} else {
+				viewModel.cancelScrub()
+			}
+		case .stopPan:
+			TVFocusLog.log.info("remote pan: stopped by a press")
+		case .none:
+			break
+		}
+		super.pressesBegan(presses, with: event)
+	}
+
+	override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+		if Self.isThumbPress(presses) { remotePan.pressEnded(at: CACurrentMediaTime()) }
+		super.pressesEnded(presses, with: event)
+	}
+
+	/// A press a recognizer took ends here instead of in pressesEnded.
+	override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+		if Self.isThumbPress(presses) { remotePan.pressEnded(at: CACurrentMediaTime()) }
+		super.pressesCancelled(presses, with: event)
+	}
+
+	/// The presses the thumb on the clickpad makes, or makes while resting
+	/// there: its click and edges, and Play/Pause. Menu is none of them: a
+	/// scrub armed just before it is the user's to abandon (handleMenuPress),
+	/// and taking it back here would leave Menu to ask about leaving instead.
+	private static let thumbPressTypes: Set<UIPress.PressType> = [
+		.select, .playPause, .upArrow, .downArrow, .leftArrow, .rightArrow,
+	]
+
+	private static func isThumbPress(_ presses: Set<UIPress>) -> Bool {
+		presses.contains { thumbPressTypes.contains($0.type) }
+	}
+
+	private var canScrub: Bool {
+		viewModel.isReadyToSeek && viewModel.duration > 0 && viewModel.errorMessage == nil
+	}
 
 	@objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
 		switch gesture.state {
 		case .began:
-			// A predominantly-vertical swipe never scrubs — it summons the
-			// chrome (focus mode) instead.
-			let velocity = gesture.velocity(in: view)
-			if !viewModel.isScrubbing, abs(velocity.y) > abs(velocity.x) {
-				panIsScrubbing = false
-				if viewModel.errorMessage == nil {
-					viewModel.showControls()
-				}
-				return
-			}
-			// Horizontal pan with the chrome hidden arms a scrub.
-			guard viewModel.isReadyToSeek,
-				viewModel.duration > 0, viewModel.errorMessage == nil
-			else {
-				panIsScrubbing = false
-				return
-			}
-			panIsScrubbing = true
-			if !viewModel.isScrubbing {
-				viewModel.beginScrub()
-			}
+			// The recognizer's own start travel is dropped, as it always was;
+			// the gate counts its dead zone from here.
 			gesture.setTranslation(.zero, in: view)
+			if !remotePan.begin(at: CACurrentMediaTime(), scrubArmed: viewModel.isScrubbing) {
+				TVFocusLog.log.info("remote pan: ignored, it began under or right after a press")
+			} else if viewModel.isScrubbing, !canScrub {
+				remotePan.refuseScrub()
+			}
 		case .changed:
-			guard panIsScrubbing, viewModel.duration > 0 else { return }
-			// Incremental deltas scaled by finger velocity (system-player
-			// feel): the same physical distance covers seconds when dragged
-			// slowly and minutes when flicked.
-			let dx = Double(gesture.translation(in: view).x)
+			let translation = gesture.translation(in: view)
 			gesture.setTranslation(.zero, in: view)
-			let speed = abs(Double(gesture.velocity(in: view).x))
-			let boost = pow(speed / Self.panAccelerationReferenceVelocity, Self.panAccelerationPower)
-			let rate = min(Self.panBaseSecondsPerPoint * (1 + boost), Self.panMaxSecondsPerPoint)
-			viewModel.updateScrub(
-				fraction: (viewModel.scrubPosition + dx * rate) / viewModel.duration)
+			let action = remotePan.move(
+				dx: Double(translation.x), dy: Double(translation.y), at: CACurrentMediaTime())
+			apply(action, velocity: Double(gesture.velocity(in: view).x))
 		case .ended, .cancelled, .failed:
 			// Lifting the finger keeps the scrub armed; consecutive pans
 			// accumulate from the armed position.
-			panIsScrubbing = false
+			remotePan.end()
 		default:
 			break
 		}
+	}
+
+	private func apply(_ action: TVRemotePanGate.Action, velocity: Double) {
+		switch action {
+		case .none:
+			break
+		case .showControls:
+			// A predominantly-vertical swipe never scrubs — it summons the
+			// chrome (focus mode) instead.
+			TVFocusLog.log.info("remote pan: vertical swipe, chrome summoned")
+			if viewModel.errorMessage == nil {
+				viewModel.showControls()
+			}
+		case .beginScrub(let points):
+			// Horizontal swipe with the chrome hidden arms a scrub, which the
+			// swipe's travel so far moves at once.
+			guard canScrub else {
+				remotePan.refuseScrub()
+				return
+			}
+			TVFocusLog.log.info("remote pan: horizontal swipe, scrub armed")
+			viewModel.beginScrub()
+			moveScrub(points: points, velocity: velocity)
+		case .moveScrub(let points):
+			moveScrub(points: points, velocity: velocity)
+		}
+	}
+
+	private func moveScrub(points: Double, velocity: Double) {
+		guard viewModel.duration > 0 else { return }
+		let seconds = TVRemotePanGate.scrubSeconds(points: points, velocity: velocity)
+		viewModel.updateScrub(
+			fraction: (viewModel.scrubPosition + seconds) / viewModel.duration)
 	}
 
 	private func nudgeScrub(by delta: Double) {
