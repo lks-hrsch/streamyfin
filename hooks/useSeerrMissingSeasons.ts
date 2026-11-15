@@ -41,6 +41,9 @@ export const useSeerrMissingSeasons = (
 
   return {
     details: seasons.length > 0 ? tv : undefined,
+    // Seerr's answer whatever the library holds: a request can wait for a
+    // season the library has meanwhile (useSeerrPendingRequest).
+    title: tv,
     held,
     seasons,
     // The page's rule, but only for what the list leaves: Seerr's details

@@ -12,7 +12,7 @@ import {
   SEERR_TV_REQUEST_CARD_WIDTH,
 } from "@/constants/Seerr";
 import { useScaledTVTypography } from "@/constants/TVTypography";
-import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import { useSeerrRequestCard } from "@/hooks/useSeerrRequestCard";
 import { scaleSize } from "@/utils/scaleSize";
 import type { MediaRequest } from "@/utils/seerr/types";
@@ -73,7 +73,7 @@ export const TVRequestCard: React.FC<{
   hasTVPreferredFocus?: boolean;
 }> = ({ request, hasTVPreferredFocus = false }) => {
   const { t } = useTranslation();
-  const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const typography = useScaledTVTypography();
   const {
     details,
@@ -119,10 +119,13 @@ export const TVRequestCard: React.FC<{
     <TVFocusablePoster
       hasTVPreferredFocus={hasTVPreferredFocus}
       onPress={() =>
-        router.push({
-          pathname: "/(auth)/(tabs)/(search)/seerr/page",
-          params: { id: String(details.id), mediaType },
-        })
+        openTitle(
+          { mediaType, mediaInfo: details.mediaInfo ?? current.media },
+          {
+            pathname: "/(auth)/(tabs)/(search)/seerr/page",
+            params: { id: String(details.id), mediaType },
+          },
+        )
       }
     >
       <View style={card}>

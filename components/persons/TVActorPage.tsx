@@ -34,12 +34,12 @@ import { useScaledTVPosterSizes } from "@/constants/TVPosterSizes";
 import { useScaledTVSizes } from "@/constants/TVSizes";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import { usePersonProfile } from "@/hooks/usePersonProfile";
 import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import { getBackdropUrl } from "@/utils/jellyfin/image/getBackdropUrl";
 import { getUserItemData } from "@/utils/jellyfin/user-library/getUserItemData";
-import { libraryItemOf } from "@/utils/seerr/libraryLinks";
 import type {
   FilmographyEntry,
   PersonCredit,
@@ -59,6 +59,7 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const { showItemActions } = useTVItemActionModal();
   const segments = useSegments();
   const from = (segments as string[])[2] || "(home)";
@@ -203,23 +204,17 @@ export const TVActorPage: React.FC<TVActorPageProps> = ({ personId }) => {
 
   // A Seerr title opens its Seerr page, where it can be requested, unless
   // Seerr has found it in the library: then its library page, as a library
-  // card does.
+  // card does (useOpenSeerrTitle).
   const handleSeerrPress = useCallback(
-    (credit: PersonCredit) => {
-      const inLibrary = libraryItemOf(credit);
-      if (inLibrary) {
-        handleItemPress(inLibrary);
-        return;
-      }
-      router.push({
+    (credit: PersonCredit) =>
+      openTitle(credit, {
         pathname: "/(auth)/(tabs)/(search)/seerr/page",
         params: {
           id: String(credit.id),
           mediaType: credit.mediaType,
         },
-      });
-    },
-    [handleItemPress, router],
+      }),
+    [openTitle],
   );
 
   // Every card is the same width, library or Seerr.

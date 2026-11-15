@@ -15,13 +15,13 @@ import {
   type ViewInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { toast } from "sonner-native";
 import { Image } from "@/components/common/ServerImage";
 import { Text } from "@/components/common/Text";
 import { GenreTags } from "@/components/GenreTags";
 import { Loader } from "@/components/Loader";
 import { SeerrRatings } from "@/components/Ratings";
 import { SeerrRequestIcon } from "@/components/seerr/SeerrRequestIcon";
+import { TVSeerrPendingRequest } from "@/components/seerr/tv/TVSeerrPendingRequest";
 import { TVSeerrSeasons } from "@/components/seerr/tv/TVSeerrSeasons";
 import { TVButton } from "@/components/tv";
 import { useTVFocusAnimation } from "@/components/tv/hooks/useTVFocusAnimation";
@@ -34,30 +34,22 @@ import {
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import { BACKGROUND_IMAGE_TRANSITION } from "@/constants/Values";
 import useRouter from "@/hooks/useAppRouter";
+import { useLeaveForLibraryPage } from "@/hooks/useLeaveForLibraryPage";
 import { useSeerr } from "@/hooks/useSeerr";
 import { useSeerrRequestOffer } from "@/hooks/useSeerrRequestOffer";
 import { useTVIssueModal } from "@/hooks/useTVIssueModal";
 import { useTVRequestModal } from "@/hooks/useTVRequestModal";
 import { useTVSeasonSelectModal } from "@/hooks/useTVSeasonSelectModal";
-import {
-  canCreateIssues,
-  hasPermission,
-  Permission,
-} from "@/utils/seerr/permissions";
+import { canCreateIssues } from "@/utils/seerr/permissions";
 import { seasonsWithStatus } from "@/utils/seerr/seasons";
 import type {
-  MediaRequest,
   MediaRequestBody,
   MovieDetails,
   MovieResult,
   TvDetails,
   TvResult,
 } from "@/utils/seerr/types";
-import {
-  MediaRequestStatus,
-  MediaStatus,
-  MediaType,
-} from "@/utils/seerr/types";
+import { MediaStatus, MediaType } from "@/utils/seerr/types";
 
 // Cast card component
 interface TVCastCardProps {
@@ -190,14 +182,7 @@ export const TVSeerrPage: React.FC = () => {
     mediaType: MediaType;
   } & Partial<MovieResult | TvResult | MovieDetails | TvDetails>;
 
-  const {
-    seerrApi,
-    seerrUser,
-    requestMedia,
-    refreshAfterRequest,
-    getTitle,
-    getYear,
-  } = useSeerr();
+  const { seerrApi, seerrUser, requestMedia, getTitle, getYear } = useSeerr();
   const { showRequestModal } = useTVRequestModal();
   const { showSeasonSelectModal } = useTVSeasonSelectModal();
   const { showIssueModal } = useTVIssueModal();
@@ -236,16 +221,12 @@ export const TVSeerrPage: React.FC = () => {
   const { hasAdvancedRequestPermission, requestMore, offersRequest } =
     useSeerrRequestOffer(details, mediaType);
 
-  const canManageRequests = useMemo(() => {
-    if (!seerrUser) return false;
-    return hasPermission(Permission.MANAGE_REQUESTS, seerrUser.permissions);
-  }, [seerrUser]);
-
-  const pendingRequest = useMemo(() => {
-    return details?.mediaInfo?.requests?.find(
-      (r: MediaRequest) => r.status === MediaRequestStatus.PENDING,
-    );
-  }, [details]);
+  // A title the library has is shown on the library's page, which plays it:
+  // this one gives way as soon as Seerr says so.
+  const { toLibrary } = useLeaveForLibraryPage({
+    mediaType,
+    mediaInfo: details?.mediaInfo,
+  });
 
   // Get seasons with status for TV shows
   const seasons = useMemo(
@@ -280,30 +261,6 @@ export const TVSeerrPage: React.FC = () => {
   }, [posterSrc, details, seerrApi]);
 
   // Handlers
-  const handleApproveRequest = useCallback(async () => {
-    if (!pendingRequest?.id) return;
-    try {
-      await seerrApi?.approveRequest(pendingRequest.id);
-      toast.success(t("seerr.toasts.request_approved"));
-      refetch();
-      refreshAfterRequest();
-    } catch (_error) {
-      toast.error(t("seerr.toasts.failed_to_approve_request"));
-    }
-  }, [seerrApi, pendingRequest, refetch, refreshAfterRequest, t]);
-
-  const handleDeclineRequest = useCallback(async () => {
-    if (!pendingRequest?.id) return;
-    try {
-      await seerrApi?.declineRequest(pendingRequest.id);
-      toast.success(t("seerr.toasts.request_declined"));
-      refetch();
-      refreshAfterRequest();
-    } catch (_error) {
-      toast.error(t("seerr.toasts.failed_to_decline_request"));
-    }
-  }, [seerrApi, pendingRequest, refetch, refreshAfterRequest, t]);
-
   const handleRequest = useCallback(async () => {
     const body: MediaRequestBody = {
       mediaId: Number(result.id!),
@@ -399,18 +356,6 @@ export const TVSeerrPage: React.FC = () => {
     ],
   );
 
-  const handlePlay = useCallback(() => {
-    const jellyfinMediaId = details?.mediaInfo?.jellyfinMediaId;
-    if (!jellyfinMediaId) return;
-    router.push({
-      pathname:
-        mediaType === MediaType.MOVIE
-          ? "/(auth)/(tabs)/(search)/items/page"
-          : "/(auth)/(tabs)/(search)/series/[id]",
-      params: { id: jellyfinMediaId },
-    });
-  }, [details, mediaType, router]);
-
   const handleCastPress = useCallback(
     (personId: number) => {
       router.push(`/(auth)/seerr/person/${personId}` as any);
@@ -423,13 +368,8 @@ export const TVSeerrPage: React.FC = () => {
   // sheet to be refused.
   const offersIssueReport =
     hasJellyfinMedia && canCreateIssues(seerrUser?.permissions);
-  const requestedByName =
-    pendingRequest?.requestedBy?.displayName ||
-    pendingRequest?.requestedBy?.username ||
-    pendingRequest?.requestedBy?.jellyfinUsername ||
-    t("seerr.unknown_user");
 
-  if (isLoading || isFetching) {
+  if (isLoading || isFetching || toLibrary) {
     return (
       <View
         style={{
@@ -640,31 +580,6 @@ export const TVSeerrPage: React.FC = () => {
                 marginBottom: 24,
               }}
             >
-              {hasJellyfinMedia && (
-                <TVButton
-                  onPress={handlePlay}
-                  hasTVPreferredFocus
-                  variant='primary'
-                  refSetter={setPlayButtonRef}
-                >
-                  <Ionicons
-                    name='play'
-                    size={28}
-                    color='#000000'
-                    style={{ marginRight: 10 }}
-                  />
-                  <Text
-                    style={{
-                      fontSize: typography.callout,
-                      fontWeight: "bold",
-                      color: "#000000",
-                    }}
-                  >
-                    {t("common.play")}
-                  </Text>
-                </TVButton>
-              )}
-
               {/* Seerr's one request button (RequestButton), as on the phone:
                   a series picks its seasons in the season sheet. */}
               {offersRequest && (
@@ -675,8 +590,8 @@ export const TVSeerrPage: React.FC = () => {
                       : handleRequest
                   }
                   variant='secondary'
-                  hasTVPreferredFocus={!hasJellyfinMedia}
-                  refSetter={!hasJellyfinMedia ? setPlayButtonRef : undefined}
+                  hasTVPreferredFocus
+                  refSetter={setPlayButtonRef}
                   scaleAmount={1.01}
                 >
                   <View style={{ marginRight: 8 }}>
@@ -701,6 +616,9 @@ export const TVSeerrPage: React.FC = () => {
               {offersIssueReport && details?.mediaInfo?.id !== undefined && (
                 <TVButton
                   variant='warning'
+                  // The first of the row when there is nothing to request.
+                  hasTVPreferredFocus={!offersRequest}
+                  refSetter={!offersRequest ? setPlayButtonRef : undefined}
                   onPress={() =>
                     showIssueModal({
                       title: mediaTitle,
@@ -728,66 +646,7 @@ export const TVSeerrPage: React.FC = () => {
             </View>
 
             {/* Approve/Decline for managers */}
-            {canManageRequests && pendingRequest && (
-              <View style={{ marginBottom: 24 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginBottom: 12,
-                  }}
-                >
-                  <Ionicons name='person-outline' size={18} color='#9CA3AF' />
-                  <Text
-                    style={{
-                      fontSize: typography.callout,
-                      color: "#9CA3AF",
-                      marginLeft: 8,
-                    }}
-                  >
-                    {t("seerr.requested_by", { user: requestedByName })}
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: "row", gap: 16 }}>
-                  <TVButton onPress={handleApproveRequest} variant='secondary'>
-                    <Ionicons
-                      name='checkmark'
-                      size={22}
-                      color='#FFFFFF'
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text
-                      style={{
-                        fontSize: typography.callout,
-                        fontWeight: "600",
-                        color: "#FFFFFF",
-                      }}
-                    >
-                      {t("seerr.approve")}
-                    </Text>
-                  </TVButton>
-
-                  <TVButton onPress={handleDeclineRequest} variant='secondary'>
-                    <Ionicons
-                      name='close'
-                      size={22}
-                      color='#FFFFFF'
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text
-                      style={{
-                        fontSize: typography.callout,
-                        fontWeight: "600",
-                        color: "#FFFFFF",
-                      }}
-                    >
-                      {t("seerr.decline")}
-                    </Text>
-                  </TVButton>
-                </View>
-              </View>
-            )}
+            <TVSeerrPendingRequest details={details} onDecided={refetch} />
           </View>
         </View>
 

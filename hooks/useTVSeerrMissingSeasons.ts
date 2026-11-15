@@ -21,6 +21,7 @@ export const useTVSeerrMissingSeasons = (
 ) => {
   const {
     details,
+    title,
     held,
     seasons,
     offersRequest,
@@ -74,6 +75,9 @@ export const useTVSeerrMissingSeasons = (
   ]);
 
   return {
+    // For the decision on a request that waits (TVSeerrPendingRequest),
+    // whatever the library holds.
+    title,
     seasons,
     offersRequest,
     requestSeasons,

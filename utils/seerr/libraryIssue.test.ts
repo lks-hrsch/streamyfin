@@ -13,6 +13,12 @@ describe("issueTitleSource", () => {
     expect(issueTitleSource({ Type: "Movie" })).toBe("self");
   });
 
+  // A series opened from Seerr now shows the library's page, which takes
+  // over the issue report Seerr's page had for the series as a whole.
+  test("a series is its own Seerr title", () => {
+    expect(issueTitleSource({ Type: "Series" })).toBe("self");
+  });
+
   // Seerr files issues against a series, never an episode of it.
   test("an episode goes through its series", () => {
     expect(issueTitleSource({ Type: "Episode", SeriesId: "s1" })).toBe(
@@ -28,13 +34,7 @@ describe("issueTitleSource", () => {
   });
 
   test("nothing else reports an issue", () => {
-    const others: BaseItemKind[] = [
-      "Series",
-      "Season",
-      "Program",
-      "Video",
-      "Book",
-    ];
+    const others: BaseItemKind[] = ["Season", "Program", "Video", "Book"];
     for (const Type of others) {
       expect(issueTitleSource({ Type, SeriesId: "s1" })).toBeUndefined();
     }

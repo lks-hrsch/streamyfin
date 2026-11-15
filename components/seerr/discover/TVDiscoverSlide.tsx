@@ -4,7 +4,7 @@ import React, { useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { TVSeerrRow } from "@/components/seerr/discover/TVSeerrRow";
 import { TVSeerrPosterCard } from "@/components/tv/TVSeerrPosterCard";
-import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import { type DiscoverEndpoint, Endpoints, useSeerr } from "@/hooks/useSeerr";
 import type {
   DiscoverSlider,
@@ -23,12 +23,12 @@ export const TVDiscoverSlide: React.FC<TVDiscoverSlideProps> = ({
   isFirstSlide = false,
 }) => {
   const { t } = useTranslation();
-  const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const { seerrApi, isSeerrMovieOrTvResult } = useSeerr();
 
   const handleItemPress = useCallback(
     (item: MovieResult | TvResult) => {
-      router.push({
+      openTitle(item, {
         pathname: "/(auth)/(tabs)/(search)/seerr/page",
         params: {
           id: String(item.id),
@@ -36,7 +36,7 @@ export const TVDiscoverSlide: React.FC<TVDiscoverSlideProps> = ({
         },
       });
     },
-    [router],
+    [openTitle],
   );
 
   const { data, fetchNextPage, hasNextPage } = useInfiniteQuery({
