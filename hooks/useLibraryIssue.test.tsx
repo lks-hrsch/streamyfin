@@ -111,6 +111,22 @@ describe("useLibraryIssue", () => {
     expect(api.tvDetails).toHaveBeenCalledWith(1396);
   });
 
+  // A series from Seerr opens on the library's page now, which takes over
+  // the report Seerr's page had for the series as a whole.
+  test("files a series' issue against its own Seerr record", async () => {
+    const { result } = await render(series);
+    await waitFor(() =>
+      expect(result.current).toEqual({
+        mediaId: 7,
+        title: "Breaking Bad",
+        episode: undefined,
+      }),
+    );
+    expect(api.tvDetails).toHaveBeenCalledWith(1396);
+    // Its own provider ids: nothing to look up.
+    expect(seriesLookedUp()).toBeUndefined();
+  });
+
   test("offers nothing for a title Seerr has no record of", async () => {
     api.movieDetails.mockResolvedValue({});
     const { result } = await render(movie);
@@ -160,7 +176,7 @@ describe("useLibraryIssue", () => {
     });
 
     test("for an item Seerr takes no issue on", async () => {
-      await expectNothingAsked({ ...series, Id: "s2" });
+      await expectNothingAsked({ ...series, Id: "s2", Type: "Season" });
       await expectNothingAsked({ Id: "p1", Type: "Program", Name: "News" });
     });
   });

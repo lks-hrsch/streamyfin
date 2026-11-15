@@ -17,7 +17,7 @@ import {
   useScaledTVSizes,
 } from "@/constants/TVSizes";
 import { useScaledTVTypography } from "@/constants/TVTypography";
-import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import { useSeerr } from "@/hooks/useSeerr";
 import { useSeerrPerson } from "@/hooks/useSeerrPerson";
 import { scaleSize } from "@/utils/scaleSize";
@@ -36,7 +36,7 @@ export const TVSeerrPersonPage: React.FC<{ personId: string }> = ({
   const insets = useSafeAreaInsets();
   const sizes = useScaledTVSizes();
   const typography = useScaledTVTypography();
-  const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const { seerrApi, seerrRegion: region, seerrLocale: locale } = useSeerr();
   const { details, roles } = useSeerrPerson(personId);
   const born = birthLine(t, details, seerrLocaleTag(locale, region));
@@ -137,7 +137,7 @@ export const TVSeerrPersonPage: React.FC<{ personId: string }> = ({
             item={role}
             hasTVPreferredFocus={index === 0}
             onPress={() =>
-              router.push({
+              openTitle(role, {
                 pathname: "/(auth)/(tabs)/(search)/seerr/page",
                 params: { id: String(role.id), mediaType: role.mediaType },
               })

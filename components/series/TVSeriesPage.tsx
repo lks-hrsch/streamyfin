@@ -25,10 +25,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ItemImage } from "@/components/common/ItemImage";
 import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
+import { TVLibraryIssueButton } from "@/components/seerr/tv/TVLibraryIssueButton";
 import {
   TVSeerrMissingSeasons,
   TVSeerrRequestSeasonsButton,
 } from "@/components/seerr/tv/TVSeerrMissingSeasons";
+import { TVSeerrPendingRequest } from "@/components/seerr/tv/TVSeerrPendingRequest";
 import { episodeRowState } from "@/components/series/episodeRowState";
 import { seasonIndexAtom } from "@/components/series/SeasonPicker";
 import { TVEpisodeList } from "@/components/series/TVEpisodeList";
@@ -44,7 +46,8 @@ import {
 } from "@/constants/TVDetailLayout";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import useRouter from "@/hooks/useAppRouter";
-import { useShuffleQueue } from "@/hooks/useShuffleQueue";
+import { usePlayEpisodeNow } from "@/hooks/useSeriesPlayback";
+import { playableQueueItems, useShuffleQueue } from "@/hooks/useShuffleQueue";
 import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
 import { useTVOptionModal } from "@/hooks/useTVOptionModal";
 import { useTVSeerrMissingSeasons } from "@/hooks/useTVSeerrMissingSeasons";
@@ -257,8 +260,11 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   const episodeRow = episodeRowState(seasonsQuery, episodesQuery);
 
   // Find next unwatched episode
+  // Among the episodes there is something to play of, as the phone's Play
+  // (useSeriesPlayback): Play starts it now, and a placeholder of a missing
+  // episode would open the player on a 400.
   const nextUnwatchedEpisode = useMemo(
-    () => getSeriesPlaybackTarget(allEpisodes),
+    () => getSeriesPlaybackTarget(playableQueueItems(allEpisodes)),
     [allEpisodes],
   );
 
@@ -286,13 +292,12 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
     [from, router],
   );
 
-  // Handle play next episode
+  // Play starts the episode it names, as the phone's does: the episode's
+  // page, with its own Play, was a second press away from it.
+  const playEpisodeNow = usePlayEpisodeNow();
   const handlePlayNextEpisode = useCallback(() => {
-    if (nextUnwatchedEpisode) {
-      const navigation = getItemNavigation(nextUnwatchedEpisode, from);
-      router.push(navigation as any);
-    }
-  }, [nextUnwatchedEpisode, from, router]);
+    if (nextUnwatchedEpisode) playEpisodeNow(nextUnwatchedEpisode);
+  }, [nextUnwatchedEpisode, playEpisodeNow]);
 
   // Handle shuffle: let the user pick the pool (current season vs the whole
   // series) via an option sheet, then build a randomized queue and start
@@ -561,11 +566,23 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
                   refSetter={seerr.setButtonRef}
                 />
               )}
+
+              {/* Last, as on Seerr's page: a sheet of its own, for the
+                  series as a whole. Nothing offline or without Seerr. */}
+              <TVLibraryIssueButton
+                item={item}
+                disabled={isSeasonModalVisible}
+              />
             </View>
 
             <TVSeerrMissingSeasons
               seasons={seerr.seasons}
               offersRequest={seerr.offersRequest}
+            />
+            <TVSeerrPendingRequest
+              details={seerr.title}
+              disabled={isSeasonModalVisible}
+              style={{ marginTop: scaleSize(16) }}
             />
           </View>
 

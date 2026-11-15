@@ -17,7 +17,7 @@ import {
 import { canCreateIssues } from "@/utils/seerr/permissions";
 
 /**
- * Where a library movie or episode can report an issue in Seerr, or undefined
+ * Where a library movie, series or episode can report an issue in Seerr, or undefined
  * when it cannot: Seerr is not set up or unreachable offline, the user may not
  * create issues, or Seerr has no record of the title.
  */

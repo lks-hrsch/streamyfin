@@ -26,6 +26,7 @@ import {
 } from "@/components/series/SeasonPicker";
 import { SeriesCast } from "@/components/series/SeriesCast";
 import { SeriesHeader } from "@/components/series/SeriesHeader";
+import { SeriesPlayRow } from "@/components/series/SeriesPlayRow";
 import { TVSeriesPage } from "@/components/series/TVSeriesPage";
 import { useSeriesQueries } from "@/components/series/useSeriesQueries";
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
@@ -252,6 +253,9 @@ const page: React.FC = () => {
       >
         <View className='flex flex-col pt-4'>
           <SeriesHeader item={item} />
+          {/* Plays the episode the series is at, as the TV's Play does:
+              no detour through Next up or an episode's page. */}
+          <SeriesPlayRow item={item} episodes={allEpisodes} />
           {!isOffline && (
             <View className='mb-4'>
               <NextUp seriesId={seriesId} />

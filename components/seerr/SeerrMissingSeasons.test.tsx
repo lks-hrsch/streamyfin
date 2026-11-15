@@ -5,6 +5,7 @@ import { SeerrMissingSeasons } from "./SeerrMissingSeasons";
 
 const mockMissing: {
   details?: TvDetails;
+  title?: TvDetails;
   held?: ReadonlySet<number>;
   seasons: MissingSeason[];
   offersRequest: boolean;
@@ -26,6 +27,14 @@ jest.mock("react-i18next", () => ({
         ? key
         : `${key}:${options.season_number}`,
   }),
+}));
+// The decision on a waiting request has its own spec
+// (SeerrPendingRequest.test.tsx): here, only which title it is handed.
+jest.mock("@/components/seerr/SeerrPendingRequest", () => ({
+  SeerrPendingRequest: ({ details }: { details?: { id: number } }) => {
+    const { Text } = jest.requireActual("react-native");
+    return details ? <Text>{`pending for ${details.id}`}</Text> : null;
+  },
 }));
 // The sheet is the Seerr page's own and not under test: what it is opened
 // with is.
@@ -91,6 +100,19 @@ describe("SeerrMissingSeasons", () => {
 
     expect(screen.queryByText("seerr.series_page.missing_seasons")).toBeNull();
     expect(mockSheetProps.current).toBeUndefined();
+  });
+
+  test("still offers the decision on a request when nothing is missing", async () => {
+    // The library can hold a season in full while its request still waits;
+    // the series opens on this page now, not on Seerr's.
+    mockMissing.details = undefined;
+    mockMissing.title = { id: 1399 } as TvDetails;
+    mockMissing.seasons = [];
+    await show();
+
+    expect(screen.queryByText("seerr.series_page.missing_seasons")).toBeNull();
+    expect(screen.getByText("pending for 1399")).toBeTruthy();
+    mockMissing.title = undefined;
   });
 
   test("lists each missing season with where it stands", async () => {

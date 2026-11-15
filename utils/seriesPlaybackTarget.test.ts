@@ -1,5 +1,5 @@
 import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client";
-import { getSeriesPlaybackTarget } from "./seriesPlaybackTarget";
+import { episodeCode, getSeriesPlaybackTarget } from "./seriesPlaybackTarget";
 
 const episode = (
   id: string,
@@ -44,5 +44,17 @@ describe("getSeriesPlaybackTarget", () => {
 
   test("returns undefined without episodes", () => {
     expect(getSeriesPlaybackTarget([])).toBeUndefined();
+  });
+});
+
+describe("episodeCode", () => {
+  it("names an episode by season and number, as the TV's Play does", () => {
+    expect(episodeCode({ ParentIndexNumber: 1, IndexNumber: 2 })).toBe("S1:E2");
+    expect(episodeCode({ ParentIndexNumber: 0, IndexNumber: 1 })).toBe("S0:E1");
+  });
+
+  it("has no name for an episode the library has not numbered", () => {
+    expect(episodeCode({ ParentIndexNumber: 1 })).toBeUndefined();
+    expect(episodeCode({ IndexNumber: null })).toBeUndefined();
   });
 });

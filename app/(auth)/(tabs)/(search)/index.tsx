@@ -47,6 +47,7 @@ import { TVSearchPage } from "@/components/search/TVSearchPage";
 import { SeerrIndexPage } from "@/components/seerr/SeerrIndexPage";
 import { SEARCH_RESULT_LIMIT } from "@/constants/Search";
 import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import { useSeerr } from "@/hooks/useSeerr";
 import { useSeerrLibrarySearch } from "@/hooks/useSeerrLibrarySearch";
 import { useServerVersion } from "@/hooks/useServerVersion";
@@ -83,6 +84,7 @@ export default function SearchPage() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const { showItemActions } = useTVItemActionModal();
   const { showOptions } = useTVOptionModal();
   const segments = useSegments();
@@ -592,7 +594,7 @@ export default function SearchPage() {
   // TV Seerr press handlers
   const handleSeerrMoviePress = useCallback(
     (item: MovieResult) => {
-      router.push({
+      openTitle(item, {
         pathname: "/(auth)/(tabs)/(search)/seerr/page",
         params: {
           mediaTitle: item.title,
@@ -607,12 +609,12 @@ export default function SearchPage() {
         },
       });
     },
-    [router, seerrApi],
+    [openTitle, seerrApi],
   );
 
   const handleSeerrTvPress = useCallback(
     (item: TvResult) => {
-      router.push({
+      openTitle(item, {
         pathname: "/(auth)/(tabs)/(search)/seerr/page",
         params: {
           mediaTitle: item.name,
@@ -627,7 +629,7 @@ export default function SearchPage() {
         },
       });
     },
-    [router, seerrApi],
+    [openTitle, seerrApi],
   );
 
   const handleSeerrResultPress = useCallback(
