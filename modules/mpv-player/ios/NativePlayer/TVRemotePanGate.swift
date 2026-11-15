@@ -18,7 +18,8 @@ struct TVRemotePanGate {
 	enum Action: Equatable {
 		case none
 		case showControls
-		case beginScrub
+		/// Arm a scrub, then move it by the travel that crossed the dead zone.
+		case beginScrub(points: Double)
 		/// Horizontal movement, in points, for an armed scrub.
 		case moveScrub(points: Double)
 	}
@@ -33,7 +34,7 @@ struct TVRemotePanGate {
 	}
 
 	/// How far, in points along one axis, a pan travels before it arms a
-	/// scrub or summons the chrome. The touch surface spans roughly the
+	/// scrub or summons the chrome (the travel then moves the scrub). The touch surface spans roughly the
 	/// 1920pt screen, so this is about a twentieth of a swipe across it: past
 	/// a resting thumb's tremble and settle, well short of any deliberate
 	/// swipe. A scrub already armed takes no dead zone, so fine adjustments
@@ -46,6 +47,11 @@ struct TVRemotePanGate {
 	/// fast, so it is cancelled. A pan starting this soon after a press is
 	/// the thumb letting go of it.
 	static let pressGuardSeconds: Double = 0.3
+
+	/// How long, in seconds, a press counts as held. Longer than any click; a
+	/// press held that long, or one whose end never reached the controller,
+	/// no longer keeps a pan from being one.
+	static let pressHoldLimitSeconds: Double = 2
 
 	/// Seconds moved per pan point at rest — a slow drag gives fine control.
 	private static let panBaseSecondsPerPoint: Double = 0.05
@@ -76,13 +82,15 @@ struct TVRemotePanGate {
 	}
 
 	private var phase: Phase = .idle
-	private var pressHeld = false
+	/// When the press still down began; nil when none is.
+	private var pressStart: Double?
 	private var lastPressEnd = -Double.infinity
 
 	/// A new pan. Returns false when it starts under a press or right after
 	/// one, and so will do nothing.
 	@discardableResult
 	mutating func begin(at time: Double, scrubArmed: Bool) -> Bool {
+		let pressHeld = pressStart.map { time - $0 < Self.pressHoldLimitSeconds } ?? false
 		if pressHeld || time - lastPressEnd < Self.pressGuardSeconds {
 			phase = .spent
 			return false
@@ -104,14 +112,15 @@ struct TVRemotePanGate {
 				phase = .pending(x: travelX, y: travelY)
 				return .none
 			}
-			// The travel itself is not applied: the scrub starts from the
-			// playing position, as it did from the recognizer's own start.
 			if abs(travelY) > abs(travelX) {
 				phase = .spent
 				return .showControls
 			}
+			// The dead zone only delays the arming: its travel moves the target
+			// too, so a swipe moves it as far as it did before the dead zone,
+			// when only the recognizer's own start travel was dropped.
 			phase = .scrubbing(armedAt: time)
-			return .beginScrub
+			return .beginScrub(points: travelX)
 		}
 	}
 
@@ -127,7 +136,7 @@ struct TVRemotePanGate {
 	}
 
 	mutating func pressBegan(at time: Double) -> PressAction {
-		pressHeld = true
+		pressStart = time
 		switch phase {
 		case .idle, .spent:
 			return .none
@@ -141,7 +150,7 @@ struct TVRemotePanGate {
 	}
 
 	mutating func pressEnded(at time: Double) {
-		pressHeld = false
+		pressStart = nil
 		lastPressEnd = time
 	}
 }

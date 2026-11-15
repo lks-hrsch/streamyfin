@@ -837,6 +837,35 @@ final class PlayerViewModel: NSObject, ObservableObject {
 		scheduleAutoHide()
 	}
 
+	#if os(tvOS)
+	/// tvOS: the Play/Pause press whose own roll on the clickpad armed the
+	/// scrub (TVRemotePanGate), at the press's release. The scrub is taken
+	/// back without cancelScrub's resume, and playback goes to the opposite of
+	/// where it stood before the scrub. Decided from what beginScrub saved, not
+	/// from engine.isPaused(): that flag follows mpv's pause event, which a
+	/// resume issued at the press's start may not have brought back by its
+	/// release, and the press would have played on.
+	func takeBackScrubForPlayPause() {
+		guard isScrubbing else {
+			togglePlayPause()
+			return
+		}
+		isScrubbing = false
+		let wasPlaying = wasPlayingBeforeScrub
+		wasPlayingBeforeScrub = false
+		if isSyncPlayActive {
+			// The scrub paused nothing in a group: the press toggles as ever.
+			togglePlayPause()
+			return
+		}
+		haptic()
+		// beginScrub paused a playing video, which is the pause the press
+		// asked for; a video that was paused plays.
+		if !wasPlaying { engine?.play() }
+		scheduleAutoHide()
+	}
+	#endif
+
 	// MARK: - Sync offsets, volume boost, rotation
 
 	func setSubtitleDelay(_ seconds: Double) {

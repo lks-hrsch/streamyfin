@@ -21,30 +21,45 @@ enum TVRemotePanGateTests {
     /// The parts of NativePlayerViewController and PlayerViewModel a pan or a
     /// press reaches, with the engine reduced to a position and a pause flag.
     /// Kept to the scrub branches of handleSelectPress, handlePlayPausePress
-    /// and handleLeft/RightPress; a change there has to be mirrored here.
+    /// and handleLeft/RightPress, pressesBegan, and the view model's
+    /// beginScrub, endScrub, cancelScrub and takeBackScrubForPlayPause; a
+    /// change there has to be mirrored here.
+    ///
+    /// `paused` is the engine; `reportedPaused` is engine.isPaused(), which
+    /// follows mpv's pause event and so lags a play or pause. Events arrive
+    /// while time passes between a touch, a slide or a press, not within one
+    /// click, which is about the round trip the audio session can take.
     struct Player {
         var position = 600.0
         let duration = 3600.0
         var paused = false
+        var reportedPaused = false
         var controlsVisible = false
         var scrubbing = false
         var scrubPosition = 0.0
         var wasPlayingBeforeScrub = false
+        var playPauseTakesBackScrub = false
         var readyToSeek = true
         var gate = TVRemotePanGate()
 
+        private mutating func deliverEngineEvents() {
+            reportedPaused = paused
+        }
+
         mutating func touch(at time: Double) {
+            deliverEngineEvents()
             gate.begin(at: time, scrubArmed: scrubbing)
             if scrubbing, !readyToSeek { gate.refuseScrub() }
         }
 
         mutating func slide(dx: Double, dy: Double = 0, at time: Double, velocity: Double = 600) {
+            deliverEngineEvents()
             switch gate.move(dx: dx, dy: dy, at: time) {
             case .none:
                 break
             case .showControls:
                 controlsVisible = true
-            case .beginScrub:
+            case .beginScrub(let points):
                 guard readyToSeek else {
                     gate.refuseScrub()
                     return
@@ -53,20 +68,31 @@ enum TVRemotePanGateTests {
                 scrubPosition = position
                 wasPlayingBeforeScrub = !paused
                 paused = true
+                moveScrub(points: points, velocity: velocity)
             case .moveScrub(let points):
-                let seconds = TVRemotePanGate.scrubSeconds(points: points, velocity: velocity)
-                scrubPosition = min(max(scrubPosition + seconds, 0), duration)
+                moveScrub(points: points, velocity: velocity)
             }
+        }
+
+        private mutating func moveScrub(points: Double, velocity: Double) {
+            let seconds = TVRemotePanGate.scrubSeconds(points: points, velocity: velocity)
+            scrubPosition = min(max(scrubPosition + seconds, 0), duration)
         }
 
         mutating func lift() {
             gate.end()
         }
 
-        mutating func pressDown(at time: Double) {
+        mutating func pressDown(_ button: Button, at time: Double) {
+            deliverEngineEvents()
+            playPauseTakesBackScrub = false
             if gate.pressBegan(at: time) == .cancelScrub, scrubbing {
-                scrubbing = false
-                if wasPlayingBeforeScrub { paused = false }
+                if button == .playPause {
+                    playPauseTakesBackScrub = true
+                } else {
+                    scrubbing = false
+                    if wasPlayingBeforeScrub { paused = false }
+                }
             }
         }
 
@@ -76,11 +102,15 @@ enum TVRemotePanGateTests {
             case .select:
                 if scrubbing { endScrub() } else { controlsVisible = true }
             case .playPause:
-                if scrubbing {
+                if playPauseTakesBackScrub {
+                    playPauseTakesBackScrub = false
+                    scrubbing = false
+                    if !wasPlayingBeforeScrub { paused = false }
+                } else if scrubbing {
                     endScrub()
-                    paused = false
+                    if reportedPaused { paused = false }
                 } else {
-                    paused.toggle()
+                    paused = !reportedPaused
                 }
             case .left:
                 if scrubbing { scrubPosition -= 10 } else { position -= 10 }
@@ -90,7 +120,7 @@ enum TVRemotePanGateTests {
         }
 
         mutating func press(_ button: Button, at time: Double) {
-            pressDown(at: time)
+            pressDown(button, at: time)
             pressUp(button, at: time + 0.1)
         }
 
@@ -116,14 +146,15 @@ enum TVRemotePanGateTests {
 
     static func pausingWithTheThumbOnTheClickpad() {
         do {
-            // The thumb rests on the clickpad and drifts a little while the
-            // other finger goes for Play/Pause.
+            // The thumb rests on the clickpad and drifts a little, then stays,
+            // and Play/Pause comes later, past the press guard: only the dead
+            // zone keeps the drift from arming a scrub the press would commit.
             var player = Player()
             player.touch(at: 0)
             player.slide(dx: 14, dy: 3, at: 0.02, velocity: 700)
             player.slide(dx: 12, dy: -2, at: 0.04, velocity: 600)
             player.slide(dx: 10, dy: 1, at: 0.06, velocity: 500)
-            player.press(.playPause, at: 0.3)
+            player.press(.playPause, at: 0.6)
             player.lift()
             expect(player.paused, "drift then Play/Pause: playback is paused")
             expect(!player.scrubbing, "drift then Play/Pause: no scrub is left armed")
@@ -136,7 +167,7 @@ enum TVRemotePanGateTests {
             player.touch(at: 0)
             player.slide(dx: 30, dy: 8, at: 0.03, velocity: 2_500)
             player.slide(dx: 25, dy: 6, at: 0.05, velocity: 2_500)
-            player.pressDown(at: 0.08)
+            player.pressDown(.select, at: 0.08)
             player.slide(dx: 40, dy: 10, at: 0.1, velocity: 3_000)
             player.slide(dx: 30, dy: 5, at: 0.12, velocity: 3_000)
             player.pressUp(.select, at: 0.18)
@@ -154,13 +185,45 @@ enum TVRemotePanGateTests {
             player.slide(dx: 70, dy: 10, at: 0.02, velocity: 3_500)
             player.slide(dx: 60, dy: 8, at: 0.04, velocity: 3_500)
             player.slide(dx: 40, dy: 4, at: 0.06, velocity: 3_000)
-            player.pressDown(at: 0.1)
+            player.pressDown(.playPause, at: 0.1)
             player.slide(dx: 30, at: 0.12, velocity: 3_000)
             player.pressUp(.playPause, at: 0.2)
             player.lift()
             expect(player.paused, "hard click then Play/Pause: playback is paused")
             expect(!player.scrubbing, "hard click then Play/Pause: no scrub is left armed")
             expect(player.position == 600, "hard click then Play/Pause: stays at 600, got \(player.position)")
+        }
+        do {
+            // The same click with nothing reaching the player during it: mpv
+            // has not reported a resume by the release. Taking the scrub back
+            // at the press's start and toggling from engine.isPaused() at its
+            // release played on (Lukas's review of #60); decided at the
+            // release from the state before the scrub, it pauses.
+            var player = Player()
+            player.touch(at: 0)
+            player.slide(dx: 70, dy: 10, at: 0.02, velocity: 3_500)
+            player.slide(dx: 60, dy: 8, at: 0.04, velocity: 3_500)
+            player.slide(dx: 40, dy: 4, at: 0.06, velocity: 3_000)
+            player.press(.playPause, at: 0.1)
+            player.lift()
+            expect(player.paused, "hard click, resume not yet reported: playback is paused")
+            expect(!player.scrubbing, "hard click, resume not yet reported: no scrub is left armed")
+            expect(player.position == 600, "hard click, resume not yet reported: stays at 600, got \(player.position)")
+        }
+        do {
+            // The same hard click on a paused video: Play/Pause plays it, from
+            // where it was, and the roll's scrub is gone.
+            var player = Player()
+            player.paused = true
+            player.touch(at: 0)
+            player.slide(dx: 70, dy: 10, at: 0.02, velocity: 3_500)
+            player.slide(dx: 60, dy: 8, at: 0.04, velocity: 3_500)
+            player.pressDown(.playPause, at: 0.1)
+            player.pressUp(.playPause, at: 0.2)
+            player.lift()
+            expect(!player.paused, "hard click on a paused video: Play/Pause plays")
+            expect(!player.scrubbing, "hard click on a paused video: no scrub is left armed")
+            expect(player.position == 600, "hard click on a paused video: stays at 600, got \(player.position)")
         }
         do {
             // Pausing first, then the thumb settles back on the clickpad.
@@ -247,12 +310,26 @@ enum TVRemotePanGateTests {
                 player.slide(dx: 50, at: Double(step) * 0.03, velocity: 1_200)
             }
             let target = player.scrubPosition
-            player.pressDown(at: 1.0)
+            player.pressDown(.select, at: 1.0)
             player.slide(dx: 40, at: 1.02, velocity: 3_000)
             player.slide(dx: 30, at: 1.04, velocity: 3_000)
             player.pressUp(.select, at: 1.1)
             player.lift()
             expect(player.position == target, "commit click with the thumb down: seeks to \(target), got \(player.position)")
+        }
+        do {
+            // The dead zone only delays a swipe: the travel that crossed it
+            // moves the target too (Lukas's review of #60), as all of a
+            // swipe's travel did before the dead zone.
+            var player = Player()
+            player.touch(at: 0)
+            player.slide(dx: 60, at: 0.03, velocity: 1_000)
+            player.slide(dx: 60, at: 0.06, velocity: 1_000)
+            player.lift()
+            let expected = 600 + TVRemotePanGate.scrubSeconds(points: 120, velocity: 1_000)
+            expect(player.scrubbing, "swipe across the dead zone: a scrub is armed")
+            expect(abs(player.scrubPosition - expected) < 0.000001,
+                   "swipe across the dead zone: moves by its whole travel to \(expected), got \(player.scrubPosition)")
         }
         do {
             // Lifting keeps the scrub armed and the next pan moves it at once,
@@ -306,6 +383,24 @@ enum TVRemotePanGateTests {
             }
             player.lift()
             expect(player.scrubbing, "swipe after a press: a scrub is armed")
+        }
+        do {
+            // A pan under a press is the press; but a press whose end never
+            // arrived holds pans back only so long.
+            var player = Player()
+            player.pressDown(.select, at: 0)
+            player.touch(at: 0.5)
+            for step in 1...10 {
+                player.slide(dx: 50, at: 0.5 + Double(step) * 0.03, velocity: 1_200)
+            }
+            player.lift()
+            expect(!player.scrubbing, "pan under a held press: no scrub is armed")
+            player.touch(at: 2.5)
+            for step in 1...10 {
+                player.slide(dx: 50, at: 2.5 + Double(step) * 0.03, velocity: 1_200)
+            }
+            player.lift()
+            expect(player.scrubbing, "pan long after a press that never ended: a scrub is armed")
         }
         do {
             // A stream that cannot seek yet refuses the scrub, and the rest of

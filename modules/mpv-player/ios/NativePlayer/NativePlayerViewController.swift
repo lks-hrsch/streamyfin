@@ -38,6 +38,9 @@ final class NativePlayerViewController: UIViewController {
 	/// Decides whether the current clickpad pan is a swipe at all, or the
 	/// thumb resting, settling or making a press (see TVRemotePanGate).
 	private var remotePan = TVRemotePanGate()
+	/// Set by pressesBegan when a Play/Pause press's own roll armed the scrub
+	/// in progress; handlePlayPausePress takes the scrub back at the release.
+	private var playPauseTakesBackScrub = false
 	/// All transport recognizers — disabled while the options panel is open
 	/// so SwiftUI focus owns the remote (a recognizer that fires on .select
 	/// would otherwise eat the press before the focused Button gets it).
@@ -487,7 +490,12 @@ final class NativePlayerViewController: UIViewController {
 	}
 
 	@objc private func handlePlayPausePress() {
-		if viewModel.isScrubbing {
+		if playPauseTakesBackScrub {
+			// The scrub was this press's own roll (pressesBegan): it pauses or
+			// plays from where playback stood before it, and seeks nowhere.
+			playPauseTakesBackScrub = false
+			viewModel.takeBackScrubForPlayPause()
+		} else if viewModel.isScrubbing {
 			// An armed scrub outranks an active segment: a scrub armed inside
 			// an intro must commit its target, not skip the intro.
 			// Play/Pause on an armed scrub means "jump there and play" even
@@ -557,16 +565,26 @@ final class NativePlayerViewController: UIViewController {
 	// Select/Play to commit, Menu to abandon — viewModel.beginScrub already
 	// pauses, endScrub seeks and resumes)
 
-	/// Every remote press reaches the gate before its recognizer acts on the
-	/// release: a pan the thumb made while pressing stops there, and a scrub
-	/// it armed a moment before is cancelled, so Play/Pause pauses where the
-	/// video was instead of committing that scrub. super keeps the responder
-	/// chain as it was.
+	/// Every press the thumb makes (isThumbPress) reaches the gate before its
+	/// recognizer acts on the release: a pan the thumb made while pressing
+	/// stops there, and a scrub it armed a moment before is cancelled, so
+	/// Play/Pause pauses where the video was instead of committing that
+	/// scrub. super keeps the responder chain as it was.
 	override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+		guard Self.isThumbPress(presses) else {
+			super.pressesBegan(presses, with: event)
+			return
+		}
+		playPauseTakesBackScrub = false
 		switch remotePan.pressBegan(at: CACurrentMediaTime()) {
 		case .cancelScrub:
 			TVFocusLog.log.info("remote pan: scrub armed by the press's own roll, cancelled")
-			if viewModel.isScrubbing {
+			guard viewModel.isScrubbing else { break }
+			if presses.contains(where: { $0.type == .playPause }) {
+				// Taken back at the release instead (handlePlayPausePress):
+				// cancelled now, its resume would race the press's own toggle.
+				playPauseTakesBackScrub = true
+			} else {
 				viewModel.cancelScrub()
 			}
 		case .stopPan:
@@ -578,14 +596,26 @@ final class NativePlayerViewController: UIViewController {
 	}
 
 	override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-		remotePan.pressEnded(at: CACurrentMediaTime())
+		if Self.isThumbPress(presses) { remotePan.pressEnded(at: CACurrentMediaTime()) }
 		super.pressesEnded(presses, with: event)
 	}
 
 	/// A press a recognizer took ends here instead of in pressesEnded.
 	override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-		remotePan.pressEnded(at: CACurrentMediaTime())
+		if Self.isThumbPress(presses) { remotePan.pressEnded(at: CACurrentMediaTime()) }
 		super.pressesCancelled(presses, with: event)
+	}
+
+	/// The presses the thumb on the clickpad makes, or makes while resting
+	/// there: its click and edges, and Play/Pause. Menu is none of them: a
+	/// scrub armed just before it is the user's to abandon (handleMenuPress),
+	/// and taking it back here would leave Menu to ask about leaving instead.
+	private static let thumbPressTypes: Set<UIPress.PressType> = [
+		.select, .playPause, .upArrow, .downArrow, .leftArrow, .rightArrow,
+	]
+
+	private static func isThumbPress(_ presses: Set<UIPress>) -> Bool {
+		presses.contains { thumbPressTypes.contains($0.type) }
 	}
 
 	private var canScrub: Bool {
@@ -629,20 +659,26 @@ final class NativePlayerViewController: UIViewController {
 			if viewModel.errorMessage == nil {
 				viewModel.showControls()
 			}
-		case .beginScrub:
-			// Horizontal swipe with the chrome hidden arms a scrub.
+		case .beginScrub(let points):
+			// Horizontal swipe with the chrome hidden arms a scrub, which the
+			// swipe's travel so far moves at once.
 			guard canScrub else {
 				remotePan.refuseScrub()
 				return
 			}
 			TVFocusLog.log.info("remote pan: horizontal swipe, scrub armed")
 			viewModel.beginScrub()
+			moveScrub(points: points, velocity: velocity)
 		case .moveScrub(let points):
-			guard viewModel.duration > 0 else { return }
-			let seconds = TVRemotePanGate.scrubSeconds(points: points, velocity: velocity)
-			viewModel.updateScrub(
-				fraction: (viewModel.scrubPosition + seconds) / viewModel.duration)
+			moveScrub(points: points, velocity: velocity)
 		}
+	}
+
+	private func moveScrub(points: Double, velocity: Double) {
+		guard viewModel.duration > 0 else { return }
+		let seconds = TVRemotePanGate.scrubSeconds(points: points, velocity: velocity)
+		viewModel.updateScrub(
+			fraction: (viewModel.scrubPosition + seconds) / viewModel.duration)
 	}
 
 	private func nudgeScrub(by delta: Double) {
