@@ -14,3 +14,11 @@ export const SEERR_SEARCH_REUSE_MS = 60_000;
  * answer stays small (no images, no user data).
  */
 export const SEERR_OWNED_TITLES_LIMIT = 100;
+
+/**
+ * How many of the library's films and series Seerr found for a text, that
+ * Jellyfin's own search did not, are fetched for the search's rows: a title
+ * typed in another language than the library's. One request each, since only
+ * a single item lookup keeps to what the user may open; the rows show ten.
+ */
+export const SEERR_LIBRARY_MATCHES_LIMIT = 10;

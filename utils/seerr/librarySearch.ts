@@ -1,12 +1,18 @@
 import type { Api } from "@jellyfin/sdk";
 import {
   type BaseItemDto,
+  type BaseItemKind,
   ItemFields,
 } from "@jellyfin/sdk/lib/generated-client/models";
 import { getLibraryApi } from "@jellyfin/sdk/lib/utils/api";
+import { isAxiosError } from "axios";
 import { orderBy } from "lodash";
-import { SEERR_OWNED_TITLES_LIMIT } from "@/constants/SeerrLibrarySearch";
+import {
+  SEERR_LIBRARY_MATCHES_LIMIT,
+  SEERR_OWNED_TITLES_LIMIT,
+} from "@/constants/SeerrLibrarySearch";
 import { seerrTitleOf } from "./jellyfinBridge";
+import { libraryItemOf } from "./libraryLinks";
 import { isMovieOrTvResult, mediaTypeOf, titleOf } from "./media";
 import {
   MediaStatus,
@@ -107,4 +113,83 @@ export const notInLibrary = (
     [(result) => titleOf(result)?.toLowerCase() === typed],
     "desc",
   );
+};
+
+/** An item id as Jellyfin writes it, whichever way Seerr kept it. */
+const itemKey = (id: string | null | undefined) =>
+  id?.replaceAll("-", "").toLowerCase();
+
+/**
+ * The library's films and series Seerr found for a text, that the library's
+ * own search did not: a title typed in another language than the library's
+ * ("Tribute von Panem" for The Hunger Games, in a library with English
+ * metadata). Jellyfin matches a text against an item's name and original
+ * title only; TMDB, which Seerr asks, against every translation and
+ * alternative title, and Seerr names the Jellyfin item of each title its
+ * library scan found (libraryItemOf).
+ *
+ * In Seerr's order, each item once, and at most SEERR_LIBRARY_MATCHES_LIMIT:
+ * each one costs a request (fetchLibraryItem).
+ */
+export const libraryTitlesFoundBySeerr = (
+  results: readonly Results[] | undefined,
+  found: readonly Pick<BaseItemDto, "Id">[],
+): (Pick<BaseItemDto, "Type"> & { Id: string })[] => {
+  const seen = new Set(found.map((item) => itemKey(item.Id)));
+  const titles: (Pick<BaseItemDto, "Type"> & { Id: string })[] = [];
+  for (const result of results ?? []) {
+    if (titles.length === SEERR_LIBRARY_MATCHES_LIMIT) break;
+    const item = libraryItemOf(result);
+    const id = item?.Id;
+    if (!item || !id || seen.has(itemKey(id))) continue;
+    seen.add(itemKey(id));
+    titles.push({ ...item, Id: id });
+  }
+  return titles;
+};
+
+/**
+ * A library item as the signed-in user sees it, or null when they may not
+ * open it. Seerr's ids name items in every library, and GET /Items?ids= lists
+ * an item of a library the user has no access to (Jellyfin 12.2 leaves the
+ * user's libraries out of an id query); this lookup answers 404 for it.
+ */
+export const fetchLibraryItem = async ({
+  api,
+  userId,
+  itemId,
+  signal,
+}: {
+  api: Api;
+  userId?: string;
+  itemId: string;
+  signal?: AbortSignal;
+}): Promise<BaseItemDto | null> => {
+  try {
+    const { data } = await getLibraryApi(api).getItem(
+      { itemId, userId },
+      { signal },
+    );
+    return data;
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 404) return null;
+    throw error;
+  }
+};
+
+/**
+ * A row of the library search, with what Seerr found in the library of the
+ * row's type after what Jellyfin's search found, none twice. The row itself
+ * when Seerr adds nothing to it, so its sort and render are not redone.
+ */
+export const withSeerrMatches = (
+  found: BaseItemDto[] | undefined,
+  matches: readonly BaseItemDto[],
+  type: BaseItemKind,
+): BaseItemDto[] | undefined => {
+  const held = new Set(found?.map((item) => itemKey(item.Id)));
+  const added = matches.filter(
+    (item) => item.Type === type && !held.has(itemKey(item.Id)),
+  );
+  return added.length > 0 ? [...(found ?? []), ...added] : found;
 };
