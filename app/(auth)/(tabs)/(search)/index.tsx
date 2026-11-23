@@ -48,6 +48,7 @@ import { SeerrIndexPage } from "@/components/seerr/SeerrIndexPage";
 import { SEARCH_RESULT_LIMIT } from "@/constants/Search";
 import useRouter from "@/hooks/useAppRouter";
 import { useSeerr } from "@/hooks/useSeerr";
+import { useSeerrLibraryMatches } from "@/hooks/useSeerrLibraryMatches";
 import { useSeerrLibrarySearch } from "@/hooks/useSeerrLibrarySearch";
 import { useServerVersion } from "@/hooks/useServerVersion";
 import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
@@ -60,6 +61,7 @@ import { eventBus } from "@/utils/eventBus";
 import { getPrimaryImageUrl } from "@/utils/jellyfin/image/getPrimaryImageUrl";
 import { searchPeople, searchStudios } from "@/utils/jellyfin/search";
 import { logAndCaptureError } from "@/utils/log";
+import { withSeerrMatches } from "@/utils/seerr/librarySearch";
 import { isSeerrQuery } from "@/utils/seerr/queries";
 import { loadDiscoverSliders } from "@/utils/seerr/sliders";
 import type { MovieResult, TvResult } from "@/utils/seerr/types";
@@ -76,9 +78,11 @@ const exampleSearches = [
 ];
 
 // The people and studio requests are covered by utils/jellyfin/search.test.ts,
-// the TV's studio section by components/search/TVSearchPage.test.tsx, and what
-// Seerr adds under the library's results by hooks/useSeerrLibrarySearch.test.tsx
-// and utils/seerr/librarySearch.test.ts.
+// the TV's studio section by components/search/TVSearchPage.test.tsx, what
+// Seerr adds under the library's results by hooks/useSeerrLibrarySearch.test.tsx,
+// the library's titles Seerr finds for a text in another language by
+// hooks/useSeerrLibraryMatches.test.tsx, and both by
+// utils/seerr/librarySearch.test.ts.
 export default function SearchPage() {
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -355,7 +359,11 @@ export default function SearchPage() {
   // The TMDB numbers keep a film or a series found here out of the titles
   // Seerr lists as not in the library (notInLibrary). Jellyfin's item search
   // leaves ProviderIds out unless asked for them.
-  const { data: moviesFound, isFetching: l1 } = useQuery({
+  const {
+    data: moviesFound,
+    isFetching: l1,
+    isPending: moviesPending,
+  } = useQuery({
     queryKey: ["search", "movies", debouncedSearch],
     queryFn: ({ signal }) =>
       searchFn({
@@ -367,7 +375,11 @@ export default function SearchPage() {
     enabled: debouncedSearch.length > 0,
   });
 
-  const { data: seriesFound, isFetching: l2 } = useQuery({
+  const {
+    data: seriesFound,
+    isFetching: l2,
+    isPending: seriesPending,
+  } = useQuery({
     queryKey: ["search", "series", debouncedSearch],
     queryFn: ({ signal }) =>
       searchFn({
@@ -489,6 +501,21 @@ export default function SearchPage() {
     enabled: debouncedSearch.length > 0,
   });
 
+  const foundTitles = useMemo(
+    () => [...(moviesFound ?? []), ...(seriesFound ?? [])],
+    [moviesFound, seriesFound],
+  );
+  // The library's titles typed in another language than its metadata:
+  // Jellyfin's search only knows each item's name and original title, so
+  // "Tribute von Panem" found nothing in a library holding The Hunger Games.
+  // Seerr's search knows every translation and which item it is.
+  const seerrLibraryMatches = useSeerrLibraryMatches({
+    seerrApi,
+    query: debouncedSearch,
+    found: foundTitles,
+    settled: !moviesPending && !seriesPending,
+  });
+
   // The Library results in the order picked, for the phone and the TV alike.
   const {
     movies,
@@ -505,8 +532,12 @@ export default function SearchPage() {
     const sorted = (items?: BaseItemDto[]) =>
       sortLibraryResults(items, librarySort, librarySortOrder);
     return {
-      movies: sorted(moviesFound),
-      series: sorted(seriesFound),
+      movies: sorted(
+        withSeerrMatches(moviesFound, seerrLibraryMatches.items, "Movie"),
+      ),
+      series: sorted(
+        withSeerrMatches(seriesFound, seerrLibraryMatches.items, "Series"),
+      ),
       episodes: sorted(episodesFound),
       collections: sorted(collectionsFound),
       actors: sorted(actorsFound),
@@ -519,6 +550,7 @@ export default function SearchPage() {
   }, [
     moviesFound,
     seriesFound,
+    seerrLibraryMatches.items,
     episodesFound,
     collectionsFound,
     actorsFound,
@@ -557,16 +589,40 @@ export default function SearchPage() {
     playlists,
   ]);
 
+  // With nothing found yet, Seerr may still find the title in another
+  // language: "No results" is held back until it has answered. With results,
+  // they show at once and Seerr's join the rows' ends.
   const loading = useMemo(() => {
-    return l1 || l2 || l3 || l7 || l8 || l9 || l10 || l11 || l12 || l13;
-  }, [l1, l2, l3, l7, l8, l9, l10, l11, l12, l13]);
+    return (
+      l1 ||
+      l2 ||
+      l3 ||
+      l7 ||
+      l8 ||
+      l9 ||
+      l10 ||
+      l11 ||
+      l12 ||
+      l13 ||
+      (noResults && seerrLibraryMatches.pending)
+    );
+  }, [
+    l1,
+    l2,
+    l3,
+    l7,
+    l8,
+    l9,
+    l10,
+    l11,
+    l12,
+    l13,
+    noResults,
+    seerrLibraryMatches.pending,
+  ]);
 
   // What Seerr could add, under the library's results. Its first page only:
   // this runs for every text typed.
-  const foundTitles = useMemo(
-    () => [...(moviesFound ?? []), ...(seriesFound ?? [])],
-    [moviesFound, seriesFound],
-  );
   const seerrNotInLibrary = useSeerrLibrarySearch({
     seerrApi,
     query: debouncedSearch,
