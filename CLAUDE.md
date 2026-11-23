@@ -109,6 +109,7 @@ TV platform:
 - `android-tv-modal-close-loses-focus` | a dismissed TV modal route leaves Android TV with nothing focused; the page must hand the focus back with requestTVFocus(). BlurView only tints there
 - `amlogic-fra-fires-before-real-framerate` | the vendor HDMI frame-rate adaptation switches on the codec's 30fps default, before MKV's real rate is known, and never corrects; app-side preferredDisplayModeId matching (matchRefreshRate setting) is the fix
 - `tv-preferred-focus-grabs-on-mount` | hasTVPreferredFocus takes the focus as the view enters the window, out of the tab bar too (tvOS when the bar lands on a tab, Android TV on every press that opens one); tab roots must not set it on mount, Home only once per session
+- `tv-clickpad-thumb-is-not-a-swipe` | a thumb resting or clicking on the Siri Remote clickpad makes pan movement; the Apple TV player's pan goes through TVRemotePanGate (dead zone, presses stop it), or pausing commits a scrub
 
 Build and tooling:
 - `mac-catalyst-build` | Mac app = iOS target on Catalyst (opt-in); derived MPVKit slice, Apple Silicon only, own sandbox entitlements, per-pod fixes and why
@@ -197,7 +198,7 @@ nix develop --command fastlane ios release target:ios dry_run:true   # target:io
 | `patches/` | Patch package overrides |
 | `augmentations/` | Type augmentations |
 | `test-utils/` | Shared test doubles: Jellyfin API, MMKV, the file system, custom headers, React Native, Reanimated, @expo/ui, drax |
-| `tests/native/` | Standalone native checks (subtitle geometry, app container paths), each run by its script in `scripts/ios/`, and subtitle playback fixtures |
+| `tests/native/` | Standalone native checks (subtitle geometry, app container paths, the Apple TV clickpad pan), each run by its script in `scripts/ios/`, and subtitle playback fixtures |
 | `translations/` | i18n catalogues, `en.json` is the only source |
 | `scripts/` | Repo tooling run through bun |
 | `biome-plugins/` | Custom Biome (Grit) lint rules, wired up in `biome.json` |
