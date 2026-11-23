@@ -67,25 +67,35 @@ const CATALYST_PODS_SNIPPET = `    ${CATALYST_PODS_MARKER} (plugins/withMacCatal
  * "bundle format is ambiguous", so the embed script rebuilds the symlinks in
  * the app's copy before stripping and signing it. The Pods copy is left alone:
  * React Native re-extracts it whenever the configuration changes.
+ *
+ * The prebuilt React.framework (React-Core-prebuilt, since Expo SDK 58) keeps
+ * its symlinks but leaves PrivacyInfo.xcprivacy and RCTI18nStrings.bundle at
+ * the top, which codesign rejects as "unsealed contents present in the root
+ * directory". Loose top-level entries move into Resources either way.
  */
-const NORMALIZE_FRAMEWORK_SH = `
-# Mac Catalyst (plugins/withMacCatalyst.ts): rebuild a versioned bundle whose symlinks were copied.
+export const NORMALIZE_FRAMEWORK_SH = `
+# Mac Catalyst (plugins/withMacCatalyst.ts): give a versioned bundle the layout codesign accepts.
 streamyfin_normalize_versioned_framework() {
   local fw="$1"
   local name
   name="$(basename "$fw" .framework)"
-  [ -d "$fw/Versions/A" ] && [ ! -L "$fw/Versions/Current" ] || return 0
+  [ -d "$fw/Versions/A" ] || return 0
   for entry in "$fw"/*; do
     case "$(basename "$entry")" in
       Versions) ;;
-      "$name"|Resources) rm -rf "$entry" ;;
-      *) mv "$entry" "$fw/Versions/A/Resources/" ;;
+      "$name"|Resources) [ -L "$entry" ] || rm -rf "$entry" ;;
+      *)
+        rm -rf "$fw/Versions/A/Resources/$(basename "$entry")"
+        mv "$entry" "$fw/Versions/A/Resources/"
+        ;;
     esac
   done
-  rm -rf "$fw/Versions/Current"
-  ln -s A "$fw/Versions/Current"
-  ln -s "Versions/Current/$name" "$fw/$name"
-  ln -s Versions/Current/Resources "$fw/Resources"
+  if [ ! -L "$fw/Versions/Current" ]; then
+    rm -rf "$fw/Versions/Current"
+    ln -s A "$fw/Versions/Current"
+  fi
+  [ -L "$fw/$name" ] || ln -s "Versions/Current/$name" "$fw/$name"
+  [ -L "$fw/Resources" ] || ln -s Versions/Current/Resources "$fw/Resources"
 }
 `;
 
