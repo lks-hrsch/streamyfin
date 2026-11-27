@@ -6,12 +6,34 @@
 export const JELLYFIN_RECEIVER_CLIENT = "Chromecast";
 
 /**
+ * Auto's ceiling, in bit/s, on a Chromecast stick, the model name the Cast SDK
+ * gives it. Above it the server copies a high-bitrate film into HLS segments
+ * cut at its keyframes, up to 25 MB each, and the stick freezes before each one
+ * of 16 MB or more, then errors, however fast its link measures: its player
+ * keeps about 30 MB of video. Transcoded, in 3 s segments, the same film plays
+ * at 7, 9 and 10 Mb/s, but never started from its beginning at 8 (3rd
+ * generation, Sintel, 17/11/2026). The lower value also sends more films to a
+ * transcode than to a copy. A quality picked by hand for the receiver passes it.
+ */
+export const CHROMECAST_STICK_MODEL = "Chromecast";
+export const CHROMECAST_STICK_AUTO_MAX_BITRATE = 7_000_000;
+
+/**
  * Name handed to the receiver for a TV whose Cast name it cannot take, followed
  * by this many characters from the end of the Cast device id, so two such TVs
  * do not share one DeviceId on the server.
  */
 export const RECEIVER_FALLBACK_NAME = "Chromecast";
 export const RECEIVER_FALLBACK_ID_LENGTH = 8;
+
+/**
+ * Bitrate cap, in bit/s, sent when the user picked none ("Max", or music): the
+ * ceiling the receiver puts on its own bandwidth measurement, which it skips
+ * once it has a cap. The receiver keeps the last cap it was given for as long
+ * as its app runs, so a message that leaves maxBitrate out never lifts an
+ * earlier cap; every message states one instead.
+ */
+export const RECEIVER_UNCAPPED_BITRATE = 120_000_000;
 
 /**
  * Most items handed to the receiver in one PlayNow message. Each one is only a
@@ -24,8 +46,8 @@ export const RECEIVER_MAX_QUEUE_ITEMS = 100;
  * How long a cast waits for the receiver to load the item before telling the
  * user it did not start. A receiver that cannot reach the server fails on its
  * first request without a word back, so this wait is the only sign of it. A
- * receiver measures its bandwidth and runs PlaybackInfo before loading, which
- * takes a few seconds on a home network.
+ * receiver fetches the item and runs PlaybackInfo before loading, which takes
+ * a few seconds on a home network.
  */
 export const RECEIVER_LOAD_TIMEOUT_MS = 30_000;
 
@@ -56,3 +78,10 @@ export const RECEIVER_STOP_GRACE_MS = 3_000;
  * Three missed reports keeps one late request from reading as a dead TV.
  */
 export const RECEIVER_LIVENESS_WINDOW_MS = 15_000;
+
+/**
+ * How often the music player moves its position on while the receiver plays a
+ * queue. The receiver reports its position only when its state changes, so in
+ * between the player counts on from the last report.
+ */
+export const MUSIC_CAST_PROGRESS_TICK_MS = 1_000;

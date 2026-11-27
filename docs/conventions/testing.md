@@ -37,6 +37,15 @@ uses and the screen carries a comment pointing at it:
 `app/(auth)/player/direct-player.tsx` is covered by
 `utils/directPlayer/directPlayerPage.test.tsx`.
 
+Native code has its own two places. Kotlin is tested with JUnit under
+`modules/<name>/android/src/test`. Swift that imports nothing but Foundation or
+AVFoundation is tested by a standalone check: `tests/native/<Name>Tests.swift`, compiled
+with the sources it covers by `scripts/ios/test-<name>.sh`, with no Xcode target and no
+simulator. `scripts/ios/run-native-checks.sh` runs every check, and CI runs both kinds
+when a module, a check or the receiver vectors change. The receiver protocol vectors in
+`e2e/fixtures/receiver-protocol` are replayed by Jest, the bench, JUnit and the Swift
+check alike: a new case goes there first, see its README.
+
 ## Writing a test
 
 Name the test after the behaviour, not the function: "keeps the resume point when the
@@ -107,6 +116,32 @@ or a number formatted with it comes out the same on every machine. A spec that n
 translations from the hook mocks `react-i18next` with `@/test-utils/realI18next`
 (`components/series/SeasonDropdown.test.tsx`). Packages that need app start-up
 configuration belong in global setup too.
+
+Quick reference — defaults already wired for every unit spec:
+
+| Where | What it provides |
+| --- | --- |
+| `jest.config.js` (`moduleNameMapper`) | `react-i18next` (identity `t`, stable `i18n.language` `en-US`), `@expo/vector-icons` (null `Ionicons`), `react-native-safe-area-context` (zero insets), `@gorhom/bottom-sheet` |
+| `test-utils/unitSetup.ts` | silent `@/utils/log`, the `@/components/common/ServerImage` view double, `expo-notifications`, `sonner-native` |
+
+Do not repeat these defaults in a spec. Keep a local override only when it
+changes behavior the test asserts (interpolation, nonzero insets, an icon's
+name, captured calls). Unmock with `jest.unmock` only the `jest.mock` defaults in
+`test-utils/unitSetup.ts` when the spec is about the module itself.
+
+<!-- A mapped package stays mapped after unmocking.
+     See https://jestjs.io/docs/configuration#modulenamemapper-objectstring-string--arraystring -->
+
+`jest.unmock` does not bypass `moduleNameMapper`: `jest.unmock("react-i18next")`
+still loads the double. To use the real `react-i18next` package in a unit spec,
+mock `react-i18next` with `@/test-utils/realI18next`, as
+`components/series/SeasonDropdown.test.tsx` does. Use a separate Jest
+configuration without package mappings only for scenarios that need the real
+packages by default, as `jest.perf.config.js` does. The perf config deliberately
+does not inherit these unit doubles, but that does not make every package real:
+`test-utils/perfSetup.ts` still mocks the native and boundary modules most
+scenarios need, `@gorhom/bottom-sheet` among them. Read it before assuming a perf
+spec measures a package's real implementation.
 
 ### The rules
 
@@ -219,6 +254,11 @@ jest.mock(
   reports the reorder a frame later. `dropRowOutside(index)` drops a row off the list,
   `sortableResets()` counts the resets of its rows, and `moveDraxRoot()` with
   `draxRootOffset()` stand for the provider's place on screen.
+- `castDoubleModule()`: for the native Cast module behind
+  `@/modules/mpv-player/src/cast/CastModule`, driven by a `createCastDoubleState()` state:
+  availability, devices, session, media status, channels and what was sent on them.
+  `emitCastEvent()` and `emitCastSessionEvent()` fire its listeners as the module would. The
+  JS side of the module runs for real on top of it.
 
 ### Writing your own mock
 
@@ -267,3 +307,12 @@ Query by what the user perceives (text, accessibility label, role) before reachi
 `bun run test:unit` has to be green, and so does the file you touched when it runs alone.
 A test that passes on its own but fails in the suite is a test that shares state with its
 neighbours, and it will fail in CI on someone else's PR rather than on yours.
+
+## End-to-end
+
+Unit tests prove the code in isolation; the end-to-end bench under `e2e/` proves the
+system against the real test server and real playback targets. Three tiers: unit tests of
+the bench itself and the shared receiver protocol vectors (`bun run test:unit` and
+`bun run e2e:bench:test`), Maestro flows on emulators and simulators (`bun run e2e:smoke`),
+and real devices driven from a developer machine. `e2e/README.md` has the commands, the private
+configuration rules and where the evidence goes.

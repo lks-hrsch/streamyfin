@@ -9,9 +9,8 @@ import {
   watchlistSheetScreenOptions,
 } from "@/components/stacks/NestedTabPageStack";
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
-import { isCastAvailable } from "@/packages/react-native-google-cast";
 
-const Chromecast = isCastAvailable ? require("@/components/Chromecast") : null;
+const Chromecast = Platform.isTV ? null : require("@/components/Chromecast");
 
 // Keeps cold boot on the Home tab.
 //
@@ -53,7 +52,7 @@ export default function IndexLayout() {
           headerRight: () =>
             Platform.isTV ? null : (
               <HeaderButtonGroup>
-                {Chromecast && <Chromecast.Chromecast />}
+                <Chromecast.Chromecast />
                 <SyncPlayButton />
               </HeaderButtonGroup>
             ),

@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-08
 **Category**: build
-**Key files**: `plugins/withMacCatalyst.ts`, `plugins/mac-catalyst/macEntitlements.ts`, `scripts/ios/mpvkit-catalyst.ts`, `scripts/ios/build-mac.ts`, `app.config.ts`, `packages/react-native-google-cast.ts`
+**Key files**: `plugins/withMacCatalyst.ts`, `plugins/mac-catalyst/macEntitlements.ts`, `scripts/ios/mpvkit-catalyst.ts`, `scripts/ios/build-mac.ts`, `app.config.ts`, `modules/mpv-player/ios/MpvPlayer.podspec`
 
 ## Detail
 
@@ -23,8 +23,9 @@ first; they are not cosmetic:
 - **Sentry picks the AppKit slice.** @sentry/react-native keys its xcframework slices by SDK
   and maps Catalyst to a `maccatalyst` SDK that does not exist; a post_integrate hook points
   `FRAMEWORK_SEARCH_PATHS[sdk=macosx*]` at the Catalyst slice.
-- **Not available on Catalyst:** Google Cast (no SDK slice; the JS goes through
-  `packages/react-native-google-cast`, which goes inert), expo-camera (VisionKit scanner;
+- **Not available on Catalyst:** Google Cast (no SDK slice; `MpvPlayer.podspec` drops the
+  `google-cast-sdk` dependency under `STREAMYFIN_MAC_CATALYST`, `ios/Cast` compiles its tvOS
+  stub, `isCastAvailable()` answers false and the header cast buttons are not mounted), expo-camera (VisionKit scanner;
   excluded at `use_expo_modules!`), ActivityKit and `BGContinuedProcessingTask` in the
   background downloader (`!targetEnvironment(macCatalyst)`).
 - **react-native-track-player** needs `CoreAudio` imported implicitly (`-import-module`).

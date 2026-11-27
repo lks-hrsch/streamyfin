@@ -97,7 +97,7 @@ struct TrackMenusRecord: Record {
 	@Field var subtitles: [TrackMenuItemRecord] = []
 	@Field var audio: [TrackMenuItemRecord] = []
 	/// Max-bitrate options (online only; empty offline). jellyfinIndex carries
-	/// the bitrate in bps, -1 = "Max". Selecting always re-negotiates in JS.
+	/// the bitrate in bps, -1 = "Max", -2 = "Auto". Selecting always re-negotiates in JS.
 	@Field var quality: [TrackMenuItemRecord] = []
 }
 
@@ -234,9 +234,9 @@ struct PlayerPresentConfigRecord: Record {
 	@Field var tracks: TrackMenusRecord?
 	@Field var subtitleStyle: SubtitleStyleRecord?
 	@Field var ui: UIOptionsRecord = UIOptionsRecord()
-	/// Which engine decodes the stream ("mpv" | "exoplayer"). Mirrored for
-	/// record-shape parity with Android; iOS's chrome always runs mpv and
-	/// ignores this field.
+	/// Which engine decodes the stream ("mpv" | "exoplayer"). iOS builds mpv
+	/// only: the module refuses any other name (NativeEngineKind) rather than
+	/// running mpv in its place.
 	@Field var engine: String?
 }
 

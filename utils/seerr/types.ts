@@ -484,7 +484,8 @@ export interface QualityProfile {
 export interface RootFolder {
   id: number;
   path: string;
-  freeSpace: number;
+  /** Missing when Servarr cannot read the folder, e.g. its directory was deleted. */
+  freeSpace?: number;
   totalSpace: number;
 }
 

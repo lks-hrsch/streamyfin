@@ -38,7 +38,8 @@ cadence meant knowing both existed, and nothing would have failed if only one ha
 | `constants/TVPosterSizes.ts` | TV poster size keys |
 | `constants/TVDetailLayout.ts` | A TV detail page's layout shares of the window: the poster beside the header, the overview's widest, the header's lowest, which the loading skeleton reads too |
 | `constants/LiveTVGuide.ts` | The phone's Live TV guide: an hour's width, the channel column, and how far before a program's end its pinned title stops |
-| `constants/Playback.ts` | Playback policy shared by the JS and native players (progress report cadence, next-episode countdown window, play queue size cap), how long a remote repeat or shuffle change waits to be confirmed, how often the stats overlay polls the transcode progress, how long a new native player waits for a closing one, and the query families that show watch progress |
+| `constants/Playback.ts` | Playback policy shared by the JS and native players (progress report cadence, next-episode countdown window, play queue size cap), how long a remote repeat or shuffle change waits to be confirmed, how often the stats overlay polls the transcode progress, how long a new native player waits for a closing one, how many times a Live TV stream's close goes out when it gets no answer and the wait between, and the query families that show watch progress |
+| `constants/Bitrate.ts` | Streaming quality: the keys of Auto and Max and how both travel to the players, and how Auto is measured (jellyfin-web's speed tests, their sizes and thresholds, the share of the rate kept, the in-network floor, how long a measure is reused and a failed one remembered, when a stream played counts as downloaded, and the choices the Auto settings offer for them), and how Auto adapts during playback (what counts as a stall or a low cache, the grace after a start or a seek, how a step down is sized, when the link is measured again to step back up). The caps themselves, `BITRATES`, are in `constants/Playback.ts` |
 | `constants/Logs.ts` | App log storage key and how many entries it keeps |
 | `constants/Privacy.ts` | What stands in for a secret in anything the app writes out (log, Sentry) |
 | `constants/Music.ts` | Music player policy: the volume normalization modes, their default, and the gain ceiling; the storage key of the stored tracks index |
@@ -50,8 +51,9 @@ cadence meant knowing both existed, and nothing would have failed if only one ha
 | `constants/StillWatching.ts` | The "Still watching?" presets, jellyfin-web 12's episode counts and session minutes |
 | `constants/Sentry.ts` | Error reporting policy: which builds report, the per session dedupe cap, the failure storm window |
 | `constants/Query.ts` | The app's query client: how many times a failed query is tried again |
-| `constants/Jellyfin.ts` | The Jellyfin server itself: the product name that identifies one in its public system info, how long that info is trusted, the two ways it writes an item id, and the bracketed forms it also reads one in |
+| `constants/Jellyfin.ts` | The Jellyfin server itself: the product name that identifies one in its public system info, how long that info is trusted, the two ways it writes an item id, the bracketed forms it also reads one in, and how long a sign-out lets it take to end the session |
 | `constants/Upcoming.ts` | Upcoming episodes: how many are asked per request, on the screen and in the home row |
+| `constants/Hero.ts` | The home hero cards: the largest font scale they follow on a phone, and the window width from which they follow the system's |
 | `constants/TVDiscovery.ts` | TV home screen tiles: Top Shelf and Android TV recommendations (play link lookup timeout) |
 | `constants/People.ts` | The people of an item: how long a cast row's credits are trusted |
 | `constants/Recommendations.ts` | Similar item rows: how many items a detail page asks the server for, and for which kinds of item |
@@ -59,7 +61,7 @@ cadence meant knowing both existed, and nothing would have failed if only one ha
 | `constants/QuickConnect.ts` | Quick Connect: how long a code stays valid, the wait between two polls of it, and how long one request may take |
 | `constants/QueryPersistence.ts` | The query cache written to disk: which query key families are kept, and how many pages of an infinite query |
 | `constants/Downloads.ts` | Downloads: the transcoded size estimate and the names of the files a download writes |
-| `constants/Cast.ts` | Official Jellyfin Cast receiver: its session client name, the name it gets for a TV whose own name it cannot take, how long a cast waits for the TV to start, how many times its channel is tried, and the window and waits used to tell a stopped receiver from a live one |
+| `constants/Cast.ts` | Official Jellyfin Cast receiver: its session client name, the name it gets for a TV whose own name it cannot take, the bitrate cap it is sent when the user picked none, how long a cast waits for the TV to start, how many times its channel is tried, and the window and waits used to tell a stopped receiver from a live one. The load wait, the queue page and the cap have native mirrors (`CastEngineConstants`, `ReceiverProtocol`) that `constants/Cast.test.ts` pins |
 | `constants/CastCrew.ts` | Cast and crew on item detail pages: how many actors the TV text line and the TV cast cards show, and how many get a "more movies with" row. |
 
 Add a new domain file when a group grows its own identity (playback, downloads,

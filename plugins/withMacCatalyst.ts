@@ -163,9 +163,9 @@ const withMacCatalyst: ConfigPlugin = (config) => {
         "post_install do |installer|",
         `post_install do |installer|\n${CATALYST_PODS_SNIPPET}`,
       );
-      // Autolinking reads react-native.config.js on every `pod install`, and
-      // that file leaves Google Cast out only while this flag is set. Pinning
-      // it here keeps a later bare `pod install` from linking it back in.
+      // MpvPlayer.podspec leaves the Google Cast SDK out only while this flag
+      // is set, on every `pod install`. Pinning it here keeps a later bare
+      // `pod install` from linking it back in.
       podfile = `ENV['STREAMYFIN_MAC_CATALYST'] = '1'\n${podfile}${CATALYST_XCCONFIG_SNIPPET}`;
     }
     mod.modResults.contents = podfile;

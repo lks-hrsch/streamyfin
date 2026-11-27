@@ -2,9 +2,26 @@ import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 import { act, render, screen, waitFor } from "@testing-library/react-native";
 import { getDefaultStore } from "jotai";
 import { Text } from "react-native";
+import {
+  MUSIC_CAST_PROGRESS_TICK_MS,
+  RECEIVER_MAX_QUEUE_ITEMS,
+} from "@/constants/Cast";
+import {
+  NO_REMOTE_TARGET,
+  type RemoteTarget,
+} from "@/modules/mpv-player/src/cast/Cast.types";
 import { userAtom } from "@/providers/JellyfinProvider";
+import {
+  type CastDoubleState,
+  createCastDoubleState,
+  emitCastEvent,
+  emitRemoteTarget,
+  nextCastDoubleState,
+  setCastSession,
+} from "@/test-utils/cast";
 import type { makeApi } from "@/test-utils/jellyfinApi";
 import { clearMmkv } from "@/test-utils/mmkv";
+import { JELLYFIN_CAST_NAMESPACE } from "@/utils/cast/jellyfinReceiver";
 import { isExpectedError } from "@/utils/errors";
 import { logAndCaptureError } from "@/utils/log";
 import { storage } from "@/utils/mmkv";
@@ -27,12 +44,22 @@ interface NativeTrack {
 const mockNative = {
   queue: [] as NativeTrack[],
   activeIndex: undefined as number | undefined,
+  /** Whether the phone plays: what play and pause last left it at. */
+  playing: false,
+  /** Where the native player stands, in seconds. */
+  position: 0,
+  /** Runs inside a pause, before it lands. */
+  onPause: undefined as (() => Promise<void>) | undefined,
+  /** Run inside an add or a play, before it lands. */
+  onAdd: undefined as (() => Promise<void>) | undefined,
+  onPlay: undefined as (() => Promise<void>) | undefined,
   outOfBounds: () => new Error("The track index is out of bounds"),
   /**
    * Runs between the native side answering a queue read and the caller seeing
    * the answer, which is when another caller's edit can slip in.
    */
   afterQueueRead: undefined as (() => Promise<void>) | undefined,
+  beforeProgress: undefined as (() => Promise<void>) | undefined,
   /** Whether setupPlayer has succeeded: the native side rejects most calls before. */
   initialized: false,
   /** Every native call that sets up or changes the queue, in order. */
@@ -76,10 +103,18 @@ jest.mock(
       setVolume: async () => undefined,
       play: async () => {
         if (!mockNative.initialized) throw mockNative.notInitialized();
+        await mockNative.onPlay?.();
+        mockNative.playing = true;
       },
-      pause: async () => undefined,
+      pause: async () => {
+        await mockNative.onPause?.();
+        mockNative.playing = false;
+      },
       seekTo: async () => undefined,
-      getProgress: async () => ({ position: 0, duration: 0, buffered: 0 }),
+      getProgress: async () => {
+        await mockNative.beforeProgress?.();
+        return { position: mockNative.position, duration: 0, buffered: 0 };
+      },
       getQueue: async () => {
         const answer = [...mockNative.queue];
         await mockNative.afterQueueRead?.();
@@ -102,6 +137,7 @@ jest.mock(
       ) => {
         mockNative.calls.push("add");
         if (!mockNative.initialized) throw mockNative.notInitialized();
+        await mockNative.onAdd?.();
         const added = Array.isArray(tracks) ? tracks : [tracks];
         const count = mockNative.queue.length;
         const index = insertBeforeIndex === -1 ? count : insertBeforeIndex;
@@ -113,6 +149,23 @@ jest.mock(
           mockNative.activeIndex += added.length;
         }
         return index;
+      },
+      remove: async (indexes: number | number[]) => {
+        const sorted = (Array.isArray(indexes) ? indexes : [indexes]).sort(
+          (a, b) => b - a,
+        );
+        for (const index of sorted) {
+          if (index < 0 || index > mockNative.queue.length - 1) {
+            throw mockNative.outOfBounds();
+          }
+          mockNative.queue.splice(index, 1);
+          if (
+            mockNative.activeIndex !== undefined &&
+            index < mockNative.activeIndex
+          ) {
+            mockNative.activeIndex -= 1;
+          }
+        }
       },
       skip: async (index: number) => {
         if (index < 0 || index > mockNative.queue.length - 1) {
@@ -159,6 +212,11 @@ jest.mock("@/utils/jellyfin/audio/getAudioStreamUrl", () => ({
     };
   },
 }));
+let mockCast: CastDoubleState = createCastDoubleState();
+jest.mock("@/modules/mpv-player/src/cast/CastModule", () => ({
+  __esModule: true,
+  CastNative: require("@/test-utils/cast").castDoubleModule(() => mockCast),
+}));
 jest.mock("@/utils/customHeaders", () => ({
   getJellyfinHeadersForUrl: () => undefined,
 }));
@@ -175,13 +233,17 @@ jest.mock("@/providers/JellyfinProvider", () => {
     mockApi,
   };
 });
+/** The phone's network as the provider reads it, changed by the tests that drop it. */
+const mockNetwork = { isConnected: true, serverConnected: true };
 jest.mock("@/providers/NetworkStatusProvider", () => ({
-  useNetworkStatus: () => ({ isConnected: true, serverConnected: true }),
+  useNetworkStatus: () => mockNetwork,
 }));
+/** The tracks downloaded on the phone, by item id, for the tests that play one. */
+const mockLocalPaths = new Map<string, string>();
 jest.mock("@/providers/AudioStorage", () => ({
   initAudioStorage: async () => undefined,
   setMaxCacheSizeMB: () => undefined,
-  getLocalPath: () => null,
+  getLocalPath: (id: string) => mockLocalPaths.get(id) ?? null,
   isDownloading: () => false,
   downloadTrack: async () => undefined,
 }));
@@ -200,6 +262,7 @@ const api: ReturnType<typeof makeApi> = jest.requireMock(
 
 const START_URL = "https://jellyfin.example.com/Sessions/Playing";
 const PROGRESS_URL = "https://jellyfin.example.com/Sessions/Playing/Progress";
+const STOPPED_URL = "https://jellyfin.example.com/Sessions/Playing/Stopped";
 
 const track = (id: string): BaseItemDto => ({
   Id: id,
@@ -240,9 +303,11 @@ const settle = async () => {
 
 type Player = ReturnType<typeof useMusicPlayer>;
 let player: Player;
+let trackView: ReturnType<typeof useMusicPlayerTrack>;
 
 const Probe = () => {
   player = useMusicPlayer();
+  trackView = useMusicPlayerTrack();
   return (
     <Text>{`${player.repeatMode} ${player.shuffleEnabled ? "shuffled" : "sorted"}`}</Text>
   );
@@ -306,11 +371,20 @@ const startPlaying = async () => {
 
 beforeEach(() => {
   clearMmkv();
+  mockLocalPaths.clear();
   mockHandlers.clear();
   mockHeldStreams.clear();
   mockNative.queue = [];
   mockNative.activeIndex = undefined;
+  mockNative.playing = false;
+  mockNative.position = 0;
+  mockNative.onPause = undefined;
+  mockNative.onAdd = undefined;
+  mockNative.onPlay = undefined;
   mockNative.afterQueueRead = undefined;
+  mockNative.beforeProgress = undefined;
+  mockNetwork.isConnected = true;
+  mockNetwork.serverConnected = true;
   mockNative.initialized = false;
   mockNative.calls = [];
   mockNative.setupError = undefined;
@@ -321,6 +395,1316 @@ beforeEach(() => {
   getDefaultStore().set(userAtom, { Id: "user", ServerId: "server" });
   api.mock.reset();
   api.mock.onPost().reply(204);
+  // No Cast session unless a test opens one: the player plays on the phone.
+  mockCast = nextCastDoubleState(mockCast);
+  mockCast.castState = "notConnected";
+  setCastSession(mockCast, null);
+});
+
+/** The PlayNow messages sent to the receiver, parsed. */
+const playNows = () =>
+  mockCast.sent
+    .map(
+      (entry) =>
+        JSON.parse(entry.message) as {
+          command: string;
+          options: {
+            items: { Id: string }[];
+            startIndex?: number;
+            startPositionTicks?: number;
+          };
+        },
+    )
+    .filter((message) => message.command === "PlayNow");
+
+/** A Cast session that connects, as the module reports it. */
+const connectCast = () =>
+  act(async () => {
+    mockCast.castState = "connected";
+    setCastSession(mockCast, "session-1");
+    emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+  });
+
+/** The state read connected before the session has started, as on iOS. */
+const connectedBeforeSession = () =>
+  act(async () => {
+    mockCast.castState = "connected";
+    emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+  });
+
+/** The session starting after that, which gives it its client. */
+const sessionStarts = () =>
+  act(async () => {
+    setCastSession(mockCast, "session-ios");
+    emitCastEvent(mockCast, "onSessionEvent", {
+      event: "started",
+      sessionId: "session-ios",
+      error: null,
+    });
+  });
+
+/** The receiver loading an item, which settles the cast. */
+const receiverLoads = async (itemId: string) => {
+  await act(async () => {
+    emitCastEvent(mockCast, "onMediaStatusChanged", {
+      status: {
+        playerState: "buffering",
+        currentItemId: 1,
+        streamPosition: 0,
+        playbackRate: 1,
+        volume: 1,
+        isMuted: false,
+        mediaInfo: { customData: { itemId, playSessionId: "ps-cast" } },
+        customData: null,
+      } as never,
+    });
+  });
+  await settle();
+};
+
+/** The Cast module double, whose transport calls the tests read. */
+const castNative = () =>
+  jest.requireMock("@/modules/mpv-player/src/cast/CastModule").CastNative as {
+    play: jest.Mock;
+    pause: jest.Mock;
+    seek: jest.Mock;
+    stop: jest.Mock;
+    getMediaStatus: jest.Mock;
+  };
+
+/** The receiver's status for an item it plays, under one of its play sessions. */
+const receiverStatus = async (
+  itemId: string,
+  playerState: string,
+  streamPosition = 0,
+  playSessionId = "ps-1",
+  extra: Record<string, unknown> = {},
+) => {
+  const status = {
+    playerState,
+    currentItemId: 1,
+    streamPosition,
+    playbackRate: 1,
+    volume: 1,
+    isMuted: false,
+    mediaInfo: { customData: { itemId, playSessionId, ...extra } },
+    customData: null,
+  } as never;
+  await act(async () => {
+    // The module answers a status read with the last status it reported.
+    mockCast.mediaStatus = status;
+    emitCastEvent(mockCast, "onMediaStatusChanged", { status });
+  });
+  await settle();
+};
+
+/** What was sent to the receiver besides PlayNow, parsed. */
+const receiverCommands = () =>
+  mockCast.sent
+    .map(
+      (entry) =>
+        JSON.parse(entry.message) as {
+          command: string;
+          options: Record<string, unknown>;
+        },
+    )
+    .filter((message) => message.command !== "PlayNow");
+
+/**
+ * What a cast tells the receiver first once it plays the queue: the phone's
+ * repeat mode, off unless the test saved another one.
+ */
+const repeatOnStart = (RepeatMode = "RepeatNone") =>
+  expect.objectContaining({
+    command: "SetRepeatMode",
+    options: { RepeatMode },
+  });
+
+/** An album cast to a connected session, its second track playing there at 12 s. */
+const castAlbum = async () => {
+  mockCast.castState = "connected";
+  setCastSession(mockCast, "session-1");
+  await mount();
+  await run((p) => p.playQueue(ALBUM, 1));
+  await receiverStatus("t1", "playing", 12);
+};
+
+/** The session ending, as the module reports it. */
+const disconnectCast = () =>
+  act(async () => {
+    mockCast.castState = "notConnected";
+    setCastSession(mockCast, null);
+    emitCastEvent(mockCast, "onCastStateChanged", { state: "notConnected" });
+  });
+
+const LIVING_ROOM: RemoteTarget = {
+  kind: "cast",
+  id: "device-1",
+  name: "Living room",
+  capabilities: { volume: true },
+};
+
+/**
+ * iOS suspends the session when the app goes to the background, as seen on an
+ * iPhone: the state reads not connected, the target reconnects.
+ */
+const suspendCast = () =>
+  act(async () => {
+    setCastSession(mockCast, null);
+    emitCastEvent(mockCast, "onSessionEvent", {
+      event: "suspended",
+      sessionId: "session-1",
+      error: null,
+    });
+    emitRemoteTarget(mockCast, {
+      ...NO_REMOTE_TARGET,
+      state: "connecting",
+      target: LIVING_ROOM,
+      reconnecting: true,
+    });
+    mockCast.castState = "notConnected";
+    emitCastEvent(mockCast, "onCastStateChanged", { state: "notConnected" });
+  });
+
+/** The target reads the session connected, as the module reports it once it is. */
+const targetConnected = () =>
+  act(async () => {
+    emitRemoteTarget(mockCast, {
+      ...NO_REMOTE_TARGET,
+      state: "connected",
+      target: LIVING_ROOM,
+    });
+  });
+
+/** The state reads not connected before the target says what became of the session. */
+const castStateNotConnected = () =>
+  act(async () => {
+    mockCast.castState = "notConnected";
+    emitCastEvent(mockCast, "onCastStateChanged", { state: "notConnected" });
+  });
+
+/**
+ * A suspension in the order an iPhone reports it, each event rendered on its
+ * own: the state reads not connected while the target still reads connected,
+ * and only then does the target say it reconnects (139 ms later on the bench).
+ */
+const suspendCastStateFirst = async () => {
+  await castStateNotConnected();
+  await act(async () => {
+    setCastSession(mockCast, null);
+    emitCastEvent(mockCast, "onSessionEvent", {
+      event: "suspended",
+      sessionId: "session-1",
+      error: null,
+    });
+    emitRemoteTarget(mockCast, {
+      ...NO_REMOTE_TARGET,
+      state: "connecting",
+      target: LIVING_ROOM,
+      reconnecting: true,
+    });
+  });
+};
+
+/** The SDK resumes the suspended session once the app is back. */
+const resumeCast = () =>
+  act(async () => {
+    setCastSession(mockCast, "session-1");
+    emitRemoteTarget(mockCast, {
+      ...NO_REMOTE_TARGET,
+      state: "connected",
+      target: LIVING_ROOM,
+    });
+    emitCastEvent(mockCast, "onSessionEvent", {
+      event: "resumed",
+      sessionId: "session-1",
+      error: null,
+    });
+    mockCast.castState = "connected";
+    emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+  });
+
+/** The suspended session never comes back: the SDK ends it. */
+const endSuspendedCast = () =>
+  act(async () => {
+    emitRemoteTarget(mockCast, NO_REMOTE_TARGET);
+    emitCastEvent(mockCast, "onSessionEvent", {
+      event: "ended",
+      sessionId: "session-1",
+      error: "com.google.cast.GCKError 1: Network connection error",
+    });
+  });
+
+describe("MusicPlayerProvider and a Cast session", () => {
+  test("plays a queue on the receiver while a session is connected, not on the phone", async () => {
+    mockCast.castState = "connected";
+    setCastSession(mockCast, "session-1");
+    await mount();
+
+    await run((p) => p.playQueue(ALBUM, 1));
+
+    expect(playNows()).toHaveLength(1);
+    expect(playNows()[0].options.items.map((item) => item.Id)).toEqual(
+      ALBUM.map((item) => item.Id),
+    );
+    expect(playNows()[0].options.startIndex).toBe(1);
+    expect(nativeIds()).toEqual([]);
+    await receiverLoads("t1");
+  });
+
+  // The receiver gets at most RECEIVER_MAX_QUEUE_ITEMS tracks: the player shows
+  // those, not tracks the receiver can never move on to.
+  test.each([0, 150])(
+    "shows the part of a long queue the receiver got, started at %i",
+    async (startIndex) => {
+      const queue = Array.from(
+        { length: RECEIVER_MAX_QUEUE_ITEMS + 60 },
+        (_, index) => track(`long-${index}`),
+      );
+      mockCast.castState = "connected";
+      setCastSession(mockCast, "session-1");
+      await mount();
+
+      await run((p) => p.playQueue(queue, startIndex));
+      const sent = playNows()[0].options.items.map((item) => item.Id);
+      await receiverStatus(`long-${startIndex}`, "playing");
+
+      expect(sent).toHaveLength(RECEIVER_MAX_QUEUE_ITEMS);
+      expect(player.queue.map((item) => item.Id)).toEqual(sent);
+      expect(player.currentTrack?.Id).toBe(`long-${startIndex}`);
+      expect(player.queue[player.queueIndex]?.Id).toBe(`long-${startIndex}`);
+    },
+  );
+
+  test("sends the queue the phone plays to the receiver when a session connects", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    expect(player.isPlaying).toBe(true);
+
+    await connectCast();
+    await settle();
+
+    expect(playNows()).toHaveLength(1);
+    expect(playNows()[0].options.items.map((item) => item.Id)).toEqual(
+      ALBUM.map((item) => item.Id),
+    );
+    // The phone stops, and the player shows the receiver loading the queue.
+    expect(mockNative.playing).toBe(false);
+    expect(player.isPlaying).toBe(true);
+    await receiverLoads("t0");
+  });
+
+  // A queue restored at launch waits paused: the session may well be for a film.
+  test("leaves a paused queue on the phone when a session connects", async () => {
+    persistQueue(ALBUM, 2);
+    await mount();
+
+    await connectCast();
+    await settle();
+
+    expect(playNows()).toEqual([]);
+  });
+
+  // Seen on the iPhone simulator (15/11): the iOS SDK reports the state connected before the session has started, so
+  // the connection had no client to send with; the phone went silent and the TV got nothing.
+  test("sends the queue once the session starts when the state reads connected first, as on iOS", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 1));
+
+    await act(async () => {
+      mockCast.castState = "connected";
+      emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+    });
+    await settle();
+    // Nothing to send with yet: the phone keeps playing.
+    expect(playNows()).toHaveLength(0);
+    expect(mockNative.playing).toBe(true);
+
+    await act(async () => {
+      setCastSession(mockCast, "session-ios");
+      emitCastEvent(mockCast, "onSessionEvent", {
+        event: "started",
+        sessionId: "session-ios",
+        error: null,
+      });
+    });
+    // The session read, then its client, then the move: one render more than a connection seen whole.
+    await waitFor(() => expect(playNows()).toHaveLength(1));
+    expect(playNows()[0].options.startIndex).toBe(1);
+    await receiverLoads("t1");
+  });
+
+  // The same iOS window for a tap: the cast had no client to send with, the phone stopped, and the TV got nothing.
+  test.each<[string, (p: Player) => unknown]>([
+    ["a track", (p) => p.playTrack(ALBUM[1], ALBUM)],
+    ["a queue", (p) => p.playQueue(ALBUM, 1)],
+  ])(
+    "%s tapped before the session starts reaches the receiver once it does, as on iOS",
+    async (_, tap) => {
+      await mount();
+      await act(async () => {
+        mockCast.castState = "connected";
+        emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+      });
+      await settle();
+
+      await run(tap);
+      await act(async () => {
+        setCastSession(mockCast, "session-ios");
+        emitCastEvent(mockCast, "onSessionEvent", {
+          event: "started",
+          sessionId: "session-ios",
+          error: null,
+        });
+      });
+
+      await waitFor(() => expect(playNows()).toHaveLength(1));
+      expect(playNows()[0].options.startIndex).toBe(1);
+      await receiverLoads("t1");
+    },
+  );
+
+  // The session can start while the tapped track still loads on the phone: the move waits for it to play.
+  test("moves a tap to the receiver when the session starts before the phone plays it", async () => {
+    await mount();
+    await act(async () => {
+      mockCast.castState = "connected";
+      emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+    });
+    await settle();
+    holdStreams("t1");
+    await run((p) => p.playQueue(ALBUM, 1));
+    expect(player.isLoading).toBe(true);
+
+    await act(async () => {
+      setCastSession(mockCast, "session-ios");
+      emitCastEvent(mockCast, "onSessionEvent", {
+        event: "started",
+        sessionId: "session-ios",
+        error: null,
+      });
+    });
+    await settle();
+    expect(playNows()).toHaveLength(0);
+
+    await releaseStreams();
+    await waitFor(() => expect(playNows()).toHaveLength(1));
+    expect(playNows()[0].options.startIndex).toBe(1);
+    expect(mockNative.playing).toBe(false);
+    await receiverLoads("t1");
+  });
+
+  // A tap cast to the receiver replaces a track still loading on the phone: that one plays neither there nor on the TV.
+  test("keeps a track cast once the session is ready over one still loading on the phone", async () => {
+    await mount();
+    await act(async () => {
+      mockCast.castState = "connected";
+      emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+    });
+    await settle();
+    holdStreams("t1");
+    await run((p) => p.playQueue(ALBUM, 1));
+    await act(async () => {
+      setCastSession(mockCast, "session-ios");
+      emitCastEvent(mockCast, "onSessionEvent", {
+        event: "started",
+        sessionId: "session-ios",
+        error: null,
+      });
+    });
+    await settle();
+
+    await run((p) => p.playQueue(ALBUM, 3));
+    await receiverLoads("t3");
+    // The receiver has the tap: the player shows no load of the phone's.
+    expect(player.isLoading).toBe(false);
+    expect(player.loadingTrackId).toBeNull();
+    await releaseStreams();
+
+    expect(playNows().map((message) => message.options.startIndex)).toEqual([
+      3,
+    ]);
+    expect(mockNative.playing).toBe(false);
+    expect(player.isLoading).toBe(false);
+  });
+
+  // The tap spends the move: the queue the phone still plays, its pause in flight, must not replace the tap on the TV.
+  test("keeps a tap on the receiver over the queue the phone still plays", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    await connectedBeforeSession();
+    holdStreams("t1");
+    await run((p) => p.playQueue(ALBUM, 1));
+    await sessionStarts();
+    await settle();
+    let releasePause = () => {};
+    const paused = new Promise<void>((resolve) => {
+      releasePause = resolve;
+    });
+    mockNative.onPause = () => paused;
+
+    await run((p) => p.playQueue(ALBUM, 3));
+    await releaseStreams();
+    await act(async () => releasePause());
+    await settle();
+
+    expect(playNows().map((message) => message.options.startIndex)).toEqual([
+      3,
+    ]);
+    await receiverLoads("t3");
+  });
+
+  // A tap while the phone's own start is in its last native calls: the phone stays silent beside the TV.
+  test.each([
+    ["add", "onAdd"],
+    ["play", "onPlay"],
+  ] as const)(
+    "keeps the phone silent when a tap reaches the receiver during its native %s",
+    async (_, hook) => {
+      await mount();
+      await connectedBeforeSession();
+      await settle();
+      let release = () => {};
+      mockNative[hook] = () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      await run((p) => p.playQueue(ALBUM, 1));
+      await sessionStarts();
+      await settle();
+
+      await run((p) => p.playQueue(ALBUM, 3));
+      mockNative[hook] = undefined;
+      await act(async () => release());
+      await settle();
+
+      expect(mockNative.playing).toBe(false);
+      expect(playNows().map((message) => message.options.startIndex)).toEqual([
+        3,
+      ]);
+      await receiverLoads("t3");
+    },
+  );
+
+  // With no start of its own in flight, the phone keeps loading its paused queue: it is what plays if the TV turns the tap down.
+  // A jump to a track not loaded yet shows the same spinner as a start, and is not one.
+  test.each<[string, () => Promise<void>]>([
+    ["paused", async () => {}],
+    [
+      "jumping to a track it has not loaded yet",
+      async () => {
+        holdStreams("t4");
+        await act(async () => {
+          void player.jumpToIndex(4);
+        });
+        await settle();
+        expect(player.isLoading).toBe(true);
+      },
+    ],
+  ])(
+    "leaves the phone its whole queue when a tap goes to the receiver, %s",
+    async (_, beforeTap) => {
+      await mount();
+      holdStreams("t2");
+      await run((p) => p.playQueue(ALBUM, 0));
+      await run((p) => p.pause());
+      await connectCast();
+      await settle();
+      await beforeTap();
+
+      await run((p) => p.playQueue(ALBUM, 3));
+      await releaseStreams();
+
+      expect(nativeIds()).toEqual(ALBUM.map((item) => item.Id));
+      await receiverLoads("t3");
+    },
+  );
+
+  // The receiver is the player while it has the queue: the mini player and
+  // Now Playing show what it plays, not what the phone last played.
+  test("shows the track the receiver plays, and where it is", async () => {
+    await castAlbum();
+
+    expect(player.queue.map((item) => item.Id)).toEqual(
+      ALBUM.map((item) => item.Id),
+    );
+    expect(player.currentTrack?.Id).toBe("t1");
+    expect(player.queueIndex).toBe(1);
+    expect(player.isPlaying).toBe(true);
+    expect(player.progress).toBeCloseTo(12, 0);
+
+    await receiverStatus("t2", "playing", 3);
+    expect(player.currentTrack?.Id).toBe("t2");
+    expect(player.queueIndex).toBe(2);
+  });
+
+  // Track rows read the track context: they mark the track the receiver plays.
+  test("the track context follows the receiver too", async () => {
+    await castAlbum();
+
+    expect(trackView.currentTrack?.Id).toBe("t1");
+    expect(trackView.isPlaying).toBe(true);
+
+    await receiverStatus("t2", "paused", 3);
+    expect(trackView.currentTrack?.Id).toBe("t2");
+    expect(trackView.isPlaying).toBe(false);
+  });
+
+  // The receiver reports its position when its state changes: in between,
+  // the mini player's bar keeps moving, and stands still while paused.
+  test("the position counts on between the receiver's reports while it plays", async () => {
+    await castAlbum();
+    const tick = () =>
+      act(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(resolve, MUSIC_CAST_PROGRESS_TICK_MS + 100),
+          ),
+      );
+
+    await tick();
+    expect(player.progress).toBeGreaterThan(12.5);
+    expect(player.progress).toBeLessThan(14);
+
+    await receiverStatus("t1", "paused", 20);
+    await tick();
+    expect(player.progress).toBe(20);
+  });
+
+  test("play and pause drive the receiver, and the phone stays silent", async () => {
+    await castAlbum();
+    castNative().pause.mockClear();
+    castNative().play.mockClear();
+
+    await run((p) => p.togglePlayPause());
+    expect(castNative().pause).toHaveBeenCalledWith("session-1");
+    await receiverStatus("t1", "paused", 14);
+    expect(player.isPlaying).toBe(false);
+
+    await run((p) => p.togglePlayPause());
+    expect(castNative().play).toHaveBeenCalledWith("session-1");
+    expect(nativeIds()).toEqual([]);
+  });
+
+  test("next and previous move the receiver through its queue", async () => {
+    await castAlbum();
+
+    await run((p) => p.next());
+    await run((p) => p.previous());
+
+    expect(receiverCommands().map((message) => message.command)).toEqual([
+      "SetRepeatMode",
+      "NextTrack",
+      "PreviousTrack",
+    ]);
+    expect(nativeIds()).toEqual([]);
+  });
+
+  test("a seek moves the receiver", async () => {
+    await castAlbum();
+    castNative().seek.mockClear();
+
+    await run((p) => p.seek(42));
+
+    expect(castNative().seek).toHaveBeenCalledWith(42, "session-1");
+  });
+
+  // A stream the receiver cannot seek in, transcoded music, is reloaded from
+  // the new position, which only the receiver's own Seek does.
+  test("a seek in a stream the receiver cannot seek in goes through the receiver", async () => {
+    await castAlbum();
+    await receiverStatus("t1", "playing", 12, "ps-1", { canClientSeek: false });
+    castNative().seek.mockClear();
+
+    await run((p) => p.seek(42));
+
+    expect(castNative().seek).not.toHaveBeenCalled();
+    expect(receiverCommands()).toEqual([
+      repeatOnStart(),
+      expect.objectContaining({ command: "Seek", options: { position: 42 } }),
+    ]);
+  });
+
+  test("a track picked in the queue starts there on the receiver", async () => {
+    await castAlbum();
+
+    await run((p) => p.jumpToIndex(3));
+    await receiverStatus("t3", "buffering", 0, "ps-2");
+
+    expect(playNows()).toHaveLength(2);
+    expect(playNows()[1].options.startIndex).toBe(3);
+    expect(player.currentTrack?.Id).toBe("t3");
+    expect(nativeIds()).toEqual([]);
+  });
+
+  // As on Spotify: the queue comes back to the phone, paused where the TV was.
+  test("a session that ends hands the receiver's queue back to the phone, paused", async () => {
+    await castAlbum();
+    await receiverStatus("t2", "playing", 30);
+
+    await disconnectCast();
+    await settle();
+
+    expect(player.queue.map((item) => item.Id)).toEqual(
+      ALBUM.map((item) => item.Id),
+    );
+    expect(player.currentTrack?.Id).toBe("t2");
+    expect(player.queueIndex).toBe(2);
+    expect(player.isPlaying).toBe(false);
+    expect(player.progress).toBeCloseTo(30, 0);
+    expect(nativeIds()).toEqual([]);
+  });
+
+  // Seen on an iPhone: an album cast before the phone ever played music has no
+  // native player, and a reset before setup rejects into Sentry.
+  test("handing back a queue the phone never played resets nothing and logs nothing", async () => {
+    await castAlbum();
+    await receiverStatus("t2", "playing", 30);
+
+    await disconnectCast();
+    await settle();
+
+    expect(mockNative.calls).not.toContain("reset");
+    expect(logAndCaptureError).not.toHaveBeenCalled();
+    expect(player.currentTrack?.Id).toBe("t2");
+  });
+
+  // The phone played before the cast: its native queue goes, so next and
+  // previous do not walk it once the queue is back.
+  test("handing back a queue drops the native queue the phone played before", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    await connectCast();
+    await settle();
+    await receiverLoads("t0");
+    mockNative.calls = [];
+
+    await disconnectCast();
+    await settle();
+
+    expect(mockNative.calls).toEqual(["reset"]);
+    expect(nativeIds()).toEqual([]);
+    expect(logAndCaptureError).not.toHaveBeenCalled();
+  });
+
+  // The reattach of a restored queue ends with a live service: the reset of a
+  // hand-back made meanwhile waits for it.
+  test("handing back a queue while the reattach is in flight resets the player once it is up", async () => {
+    mockNative.setupDelayMs = 300;
+    persistQueue(ALBUM, 2);
+    await castAlbum();
+    await disconnectCast();
+    await settle();
+    expect(mockNative.calls).toEqual(["setupPlayer"]);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
+
+    expect(mockNative.calls).toEqual(["setupPlayer", "reset"]);
+    expect(logAndCaptureError).not.toHaveBeenCalled();
+  });
+
+  // Seen on an iPhone: the app went to the background, the TV played on, and
+  // the phone came back with the queue paused where the suspension found it.
+  // A play there then played on both.
+  test("a session suspended in the background keeps the receiver's queue, and follows it again once resumed", async () => {
+    await castAlbum();
+
+    await suspendCast();
+    await settle();
+    expect(player.currentTrack?.Id).toBe("t1");
+
+    await resumeCast();
+    await receiverStatus("t2", "playing", 40);
+
+    expect(player.currentTrack?.Id).toBe("t2");
+    expect(player.isPlaying).toBe(true);
+    castNative().pause.mockClear();
+    await run((p) => p.togglePlayPause());
+    expect(castNative().pause).toHaveBeenCalledWith("session-1");
+    expect(nativeIds()).toEqual([]);
+  });
+
+  test("a suspended session that never comes back hands the queue back", async () => {
+    await castAlbum();
+    await suspendCast();
+    await settle();
+
+    await endSuspendedCast();
+    await settle();
+
+    expect(player.currentTrack?.Id).toBe("t1");
+    expect(player.isPlaying).toBe(false);
+    expect(player.progress).toBeCloseTo(12, 0);
+    expect(nativeIds()).toEqual([]);
+  });
+
+  // Seen on an iPhone: the state read not connected one render before the
+  // target said it reconnects, and that render handed the queue back. The TV
+  // played the next track while the phone stayed on the first, paused.
+  test("a suspension whose state comes before the target's keeps the receiver's queue", async () => {
+    await castAlbum();
+    await targetConnected();
+
+    await suspendCastStateFirst();
+    await settle();
+    // The receiver still holds the queue: the phone cannot edit it.
+    expect(player.canEditQueue).toBe(false);
+
+    await resumeCast();
+    await receiverStatus("t2", "playing", 40);
+
+    expect(player.currentTrack?.Id).toBe("t2");
+    expect(player.isPlaying).toBe(true);
+    expect(nativeIds()).toEqual([]);
+  });
+
+  test("a session that ends with its state read first still hands the queue back", async () => {
+    await castAlbum();
+    await targetConnected();
+
+    await castStateNotConnected();
+    await act(async () => {
+      setCastSession(mockCast, null);
+      emitRemoteTarget(mockCast, NO_REMOTE_TARGET);
+      emitCastEvent(mockCast, "onSessionEvent", {
+        event: "ended",
+        sessionId: "session-1",
+        error: null,
+      });
+    });
+    await settle();
+
+    expect(player.canEditQueue).toBe(true);
+    expect(player.currentTrack?.Id).toBe("t1");
+    expect(player.isPlaying).toBe(false);
+    expect(player.progress).toBeCloseTo(12, 0);
+  });
+
+  test("an AirPlay target taking over from the Cast session hands the queue back", async () => {
+    await castAlbum();
+    await targetConnected();
+
+    await castStateNotConnected();
+    await act(async () => {
+      setCastSession(mockCast, null);
+      emitRemoteTarget(mockCast, {
+        ...NO_REMOTE_TARGET,
+        state: "connected",
+        target: { ...LIVING_ROOM, kind: "airplay", id: "airplay-1" },
+      });
+    });
+    await settle();
+
+    expect(player.canEditQueue).toBe(true);
+    expect(player.currentTrack?.Id).toBe("t1");
+    expect(player.isPlaying).toBe(false);
+  });
+
+  // As on Spotify: connected to a TV, play sends the paused queue there, from
+  // the track and the place it paused on, and the phone stays silent.
+  test("play on a paused queue while a session is connected sends it to the receiver from where it paused", async () => {
+    await castAlbum();
+    await receiverStatus("t2", "playing", 30);
+    await disconnectCast();
+    await settle();
+    await connectCast();
+    await settle();
+
+    await run((p) => p.togglePlayPause());
+
+    const sent = playNows();
+    expect(sent).toHaveLength(2);
+    expect(sent[1].options.items.map((item) => item.Id)).toEqual(
+      ALBUM.map((item) => item.Id),
+    );
+    expect(sent[1].options.startIndex).toBe(2);
+    expect(sent[1].options.startPositionTicks).toBe(30 * 10_000_000);
+    expect(nativeIds()).toEqual([]);
+    expect(mockNative.playing).toBe(false);
+    await receiverLoads("t2");
+  });
+
+  // A queue that holds a track twice, paused on its second time: the receiver got the queue from the first one,
+  // and played again what came between.
+  test("play on a paused queue with a track twice sends it from the time it paused on", async () => {
+    persistQueue([track("t0"), track("t1"), track("t0")], 2);
+    await mount();
+    await connectCast();
+    await settle();
+
+    await run((p) => p.togglePlayPause());
+
+    const sent = playNows();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].options.startIndex).toBe(2);
+  });
+
+  // The iOS window again, for Play: the cast had no client to send with, and the paused queue played nowhere.
+  // The session can also get its client while the phone still fetches the track: the move waits for it to play.
+  test.each([
+    ["once the phone plays it", false],
+    ["while the phone still fetches the track", true],
+  ])(
+    "play on a paused queue before the session starts reaches the receiver when the session starts %s, as on iOS",
+    async (_, fetching) => {
+      persistQueue(ALBUM, 2);
+      await mount();
+      await act(async () => {
+        mockCast.castState = "connected";
+        emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+      });
+      await settle();
+
+      if (fetching) holdStreams("t2");
+      await act(async () => {
+        void player.togglePlayPause();
+      });
+      await settle();
+      expect(playNows()).toHaveLength(0);
+      expect(mockNative.playing).toBe(!fetching);
+
+      await act(async () => {
+        setCastSession(mockCast, "session-ios");
+        emitCastEvent(mockCast, "onSessionEvent", {
+          event: "started",
+          sessionId: "session-ios",
+          error: null,
+        });
+      });
+      await settle();
+      if (fetching) await releaseStreams();
+
+      await waitFor(() => expect(playNows()).toHaveLength(1));
+      expect(playNows()[0].options.startIndex).toBe(2);
+      expect(mockNative.playing).toBe(false);
+      await receiverLoads("t2");
+    },
+  );
+
+  // Play on the paused queue while a track tapped in that window still loads on the phone: the TV got the paused
+  // queue, then the load played on the phone and the move sent it to the TV too.
+  test("play while a tapped track still loads on the phone sends the paused queue to the receiver alone, as on iOS", async () => {
+    persistQueue(ALBUM, 2);
+    await mount();
+    await act(async () => {
+      mockCast.castState = "connected";
+      emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+    });
+    await settle();
+    holdStreams("t1");
+    await run((p) => p.playQueue(ALBUM, 1));
+    await act(async () => {
+      setCastSession(mockCast, "session-ios");
+      emitCastEvent(mockCast, "onSessionEvent", {
+        event: "started",
+        sessionId: "session-ios",
+        error: null,
+      });
+    });
+    await settle();
+
+    await run((p) => p.togglePlayPause());
+    await receiverLoads("t2");
+    await releaseStreams();
+
+    expect(playNows().map((message) => message.options.startIndex)).toEqual([
+      2,
+    ]);
+    expect(mockNative.playing).toBe(false);
+    expect(player.isLoading).toBe(false);
+  });
+
+  // Play pressed again while the first Play still resumes on the phone: that resume landed and played next to the TV,
+  // then the move sent the queue a second time, from the start of the track.
+  test.each([
+    ["fetches the stream", "stream"],
+    ["adds the track", "add"],
+    ["starts the phone", "play"],
+    ["plays a queue already loaded", "live"],
+  ] as const)(
+    "play pressed again while the phone still resumes, as it %s, sends the queue once and leaves the phone silent, as on iOS",
+    async (_, step) => {
+      if (step !== "live") persistQueue(ALBUM, 2);
+      await mount();
+      if (step === "live") {
+        await run((p) => p.playQueue(ALBUM, 2));
+        await run((p) => p.pause());
+      }
+      await connectedBeforeSession();
+      await settle();
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      if (step === "stream") holdStreams("t2");
+      if (step === "add") mockNative.onAdd = () => held;
+      if (step === "play" || step === "live") mockNative.onPlay = () => held;
+      await act(async () => {
+        void player.togglePlayPause();
+      });
+      await settle();
+      mockNative.onAdd = undefined;
+      await sessionStarts();
+      await settle();
+
+      await run((p) => p.togglePlayPause());
+      await receiverLoads("t2");
+      let phonePlays = 0;
+      mockNative.onPlay = async () => {
+        phonePlays += 1;
+      };
+      await act(async () => release());
+      await releaseStreams();
+
+      expect({
+        sends: playNows().map((message) => message.options.startIndex),
+        phonePlays,
+      }).toEqual({ sends: [2], phonePlays: 0 });
+      expect(mockNative.playing).toBe(false);
+    },
+  );
+
+  // Seen on an iPhone: the TV played the queue while the server still listed
+  // the phone as playing it, from the last report before its pause.
+  test("play on a paused queue while a session is connected ends the phone's play session on the server", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    await run((p) => p.pause());
+    await connectCast();
+    await settle();
+    expect(reports(STOPPED_URL)).toEqual([]);
+
+    await run((p) => p.togglePlayPause());
+    expect(reports(STOPPED_URL)).toEqual([]);
+    await receiverLoads("t0");
+
+    expect(reports(STOPPED_URL)).toEqual([
+      expect.objectContaining({ ItemId: "t0", PlaySessionId: "session-t0" }),
+    ]);
+  });
+
+  // A receiver that refuses the queue leaves it on the phone: its play session goes on, as the server still lists
+  // it, instead of a session the server heard stop that a play on the phone then resumes.
+  test("a queue the receiver refuses keeps the phone's play session", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    await run((p) => p.pause());
+    await connectCast();
+    await settle();
+
+    await run((p) => p.togglePlayPause());
+    await act(async () => {
+      emitCastEvent(mockCast, "onReceiverMessage", {
+        namespace: JELLYFIN_CAST_NAMESPACE,
+        message: JSON.stringify({ type: "error", message: "refused" }),
+      });
+    });
+    await settle();
+
+    expect(playNows()).toHaveLength(1);
+    expect(reports(STOPPED_URL)).toEqual([]);
+  });
+
+  test("the queue the phone plays ends its play session on the server when a session connects", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+
+    await connectCast();
+    await settle();
+    expect(reports(STOPPED_URL)).toEqual([]);
+    await receiverLoads("t0");
+
+    expect(reports(STOPPED_URL)).toEqual([
+      expect.objectContaining({ ItemId: "t0", PlaySessionId: "session-t0" }),
+    ]);
+  });
+
+  // A downloaded track plays in a phone session without a play session id: the hand-off ends that one too, or the
+  // server lists the phone next to the TV, paused by the hand-off.
+  test("a downloaded track the phone plays ends its play session on the server when a session connects", async () => {
+    mockLocalPaths.set("t0", "file:///music/t0.flac");
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+
+    await connectCast();
+    await settle();
+    await receiverLoads("t0");
+
+    expect(reports(STOPPED_URL)).toEqual([
+      expect.objectContaining({ ItemId: "t0" }),
+    ]);
+    expect(reports(STOPPED_URL)[0].PlaySessionId).toBeUndefined();
+  });
+
+  // A track picked while the session has no client yet: the phone's session is reported stopped, then the cast
+  // pauses the phone, and that pause was reported for the stopped track.
+  test("a track picked before the session's client is ready reports no pause after its stop", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    await act(async () => {
+      mockCast.castState = "connected";
+      emitCastEvent(mockCast, "onCastStateChanged", { state: "connected" });
+    });
+    await settle();
+    const before = reports(PROGRESS_URL).length;
+
+    await run((p) => p.playTrack(ALBUM[1], ALBUM));
+    await settle();
+
+    expect(reports(STOPPED_URL)).toHaveLength(1);
+    expect(reports(PROGRESS_URL)).toHaveLength(before);
+  });
+
+  test("stopping the queue on the receiver does not end the phone's play session a second time", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    await connectCast();
+    await settle();
+    await receiverLoads("t0");
+    await receiverStatus("t0", "playing", 5);
+
+    await run((p) => p.stop());
+
+    expect(
+      reports(STOPPED_URL).filter((r) => r.PlaySessionId === "session-t0"),
+    ).toHaveLength(1);
+  });
+
+  // The hand-off ended the phone's session, and a repeat change then reported it playing again.
+  test("a repeat change after the hand-off reports nothing for the phone", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    await connectCast();
+    await settle();
+    await receiverLoads("t0");
+    await receiverStatus("t0", "playing", 5);
+    const before = reports(PROGRESS_URL).length;
+
+    await run((p) => p.setRepeatMode("all"));
+
+    expect(player.repeatMode).toBe("all");
+    expect(reports(PROGRESS_URL).slice(before)).toEqual([]);
+  });
+
+  // A film cast from its page replaces the music on the TV.
+  test("the player lets go of a receiver that plays something else", async () => {
+    await castAlbum();
+    castNative().pause.mockClear();
+
+    await receiverStatus("film-1", "playing", 5, "ps-film");
+
+    expect(player.currentTrack?.Id).not.toBe("t1");
+    await run((p) => p.togglePlayPause());
+    expect(castNative().pause).not.toHaveBeenCalled();
+  });
+
+  // Offline, a new play stays on the phone; the queue already on the TV does not
+  // come back for a drop of the phone's own network while the session lasts.
+  test("keeps the receiver's queue through a network drop on the phone", async () => {
+    await castAlbum();
+
+    mockNetwork.serverConnected = false;
+    await receiverStatus("t1", "playing", 14);
+    expect(player.currentTrack?.Id).toBe("t1");
+    expect(player.isPlaying).toBe(true);
+
+    mockNetwork.serverConnected = true;
+    await receiverStatus("t1", "playing", 16);
+    castNative().pause.mockClear();
+    await run((p) => p.togglePlayPause());
+    expect(castNative().pause).toHaveBeenCalledWith("session-1");
+  });
+
+  test("an account switch drops the receiver's queue from the player", async () => {
+    await castAlbum();
+
+    await act(async () => {
+      getDefaultStore().set(userAtom, { Id: "other", ServerId: "server" });
+    });
+    await settle();
+    expect(player.queue).toEqual([]);
+
+    await disconnectCast();
+    await settle();
+    expect(player.queue).toEqual([]);
+  });
+
+  test("repeat follows to the receiver", async () => {
+    await castAlbum();
+
+    await run((p) => p.setRepeatMode("all"));
+
+    expect(player.repeatMode).toBe("all");
+    expect(receiverCommands()).toEqual([
+      repeatOnStart(),
+      repeatOnStart("RepeatAll"),
+    ]);
+  });
+
+  // The receiver keeps one repeat mode for as long as its app runs, whatever
+  // it is sent to play: a cast tells it the phone's.
+  test("a cast tells the receiver the phone's repeat mode", async () => {
+    storage.set("music_player_repeat_mode", "all");
+    await castAlbum();
+
+    expect(player.repeatMode).toBe("all");
+    expect(receiverCommands()).toEqual([repeatOnStart("RepeatAll")]);
+  });
+
+  // Until the receiver reports the queue, its commands are held back: the
+  // player would show a mode the receiver does not play in.
+  test("repeat stays as it was when the receiver is not told", async () => {
+    mockCast.castState = "connected";
+    setCastSession(mockCast, "session-1");
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 1));
+    const before = player.repeatMode;
+
+    await run((p) => p.setRepeatMode(before === "all" ? "one" : "all"));
+
+    expect(player.repeatMode).toBe(before);
+    expect(receiverCommands()).toEqual([]);
+    // Settles the cast, which would otherwise wait on into the next test.
+    await receiverStatus("t1", "playing");
+  });
+
+  // The receiver has no command to take a track out or move one, so the
+  // queue screen offers none while it has the queue.
+  test("the queue cannot be edited while the receiver has it", async () => {
+    await castAlbum();
+    expect(player.canEditQueue).toBe(false);
+
+    await disconnectCast();
+    await settle();
+    expect(player.canEditQueue).toBe(true);
+  });
+
+  // Stopped from the TV's remote, the receiver keeps the session and reports
+  // the track it stopped on as idle, its media session over: play sends the
+  // queue again from that track, where a play on the receiver did nothing.
+  test("play casts the queue again from where the receiver stopped", async () => {
+    await castAlbum();
+    await receiverStatus("t1", "idle", 0);
+    expect(player.isPlaying).toBe(false);
+    expect(player.currentTrack?.Id).toBe("t1");
+
+    await run((p) => p.togglePlayPause());
+
+    expect(playNows()).toHaveLength(2);
+    expect(playNows()[1].options.items.map((item) => item.Id)).toEqual(
+      ALBUM.map((item) => item.Id),
+    );
+    expect(playNows()[1].options.startIndex).toBe(1);
+    await receiverStatus("t1", "playing", 0, "ps-2");
+    expect(player.isPlaying).toBe(true);
+  });
+
+  // The receiver adds both at the end of its queue, and the player shows its order.
+  test("tracks added during a cast go to the receiver's queue", async () => {
+    await castAlbum();
+
+    await run((p) => p.playNext(track("n1")));
+    await run((p) => p.addToQueue(track("l1")));
+
+    const [repeat, ...queued] = receiverCommands();
+    expect(repeat).toEqual(repeatOnStart());
+    expect(
+      queued.map((message) => [
+        message.command,
+        (message.options.items as { Id: string }[]).map((item) => item.Id),
+      ]),
+    ).toEqual([
+      ["PlayNext", ["n1"]],
+      ["PlayLast", ["l1"]],
+    ]);
+    expect(player.queue.map((item) => item.Id)).toEqual([
+      ...ALBUM.map((item) => item.Id),
+      "n1",
+      "l1",
+    ]);
+    expect(nativeIds()).toEqual([]);
+  });
+
+  // The receiver has no command to take a track out or move one.
+  test("queue edits the receiver cannot follow change nothing during a cast", async () => {
+    await castAlbum();
+    const shuffled = player.shuffleEnabled;
+
+    await run((p) => p.removeFromQueue(3));
+    await run((p) => p.moveInQueue(0, 2));
+    await run((p) => p.reorderQueue([...ALBUM].reverse()));
+    await run((p) => p.toggleShuffle());
+    await run((p) => p.clearQueue());
+
+    expect(player.queue.map((item) => item.Id)).toEqual(
+      ALBUM.map((item) => item.Id),
+    );
+    expect(player.shuffleEnabled).toBe(shuffled);
+    expect(receiverCommands()).toEqual([repeatOnStart()]);
+  });
+
+  test("a queue handed back plays on with the rest of it", async () => {
+    await castAlbum();
+    await receiverStatus("t2", "playing", 30);
+    await disconnectCast();
+    await settle();
+
+    await run((p) => p.resume());
+    await settle();
+
+    expect(nativeIds()).toEqual(ALBUM.map((item) => item.Id));
+    expect(nativeActiveId()).toBe("t2");
+  });
+
+  // The account can switch while the phone stops for the cast.
+  test("drops a queue moved to the receiver when the account switched during the pause", async () => {
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    let release = () => {};
+    mockNative.onPause = () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      });
+
+    await connectCast();
+    await settle();
+    await act(async () => {
+      getDefaultStore().set(userAtom, { Id: "other", ServerId: "server" });
+    });
+    await settle();
+    await act(async () => release());
+    await settle();
+
+    expect(playNows()).toEqual([]);
+  });
+
+  test("drops a queue whose cast was on its way when the account switched", async () => {
+    mockCast.castState = "connected";
+    setCastSession(mockCast, "session-1");
+    await mount();
+    let release = () => {};
+    castNative().getMediaStatus.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(null);
+        }),
+    );
+
+    await act(async () => {
+      player.playQueue(ALBUM, 0);
+    });
+    await settle();
+    await act(async () => {
+      getDefaultStore().set(userAtom, { Id: "other", ServerId: "server" });
+    });
+    await settle();
+    await act(async () => release());
+    await settle();
+
+    expect(playNows()).toEqual([]);
+  });
 });
 
 describe("MusicPlayerProvider and the native queue", () => {
@@ -480,6 +1864,57 @@ describe("MusicPlayerProvider and the native queue", () => {
     expect(nativeIds()).toEqual([]);
     expect(player.currentTrack).toBeNull();
     expect(player.isLoading).toBe(false);
+  });
+
+  // The rest of a resumed queue loads one track at a time: a queue played
+  // meanwhile resets the player, and the old load must not add to the new one.
+  test("a queue played while a resumed one still loads keeps only its own tracks", async () => {
+    persistQueue(ALBUM, 0);
+    await mount();
+    holdStreams("t2");
+    await run((p) => p.resume());
+    expect(nativeIds()).toEqual(["t0", "t1"]);
+
+    await run((p) => p.playQueue(["n0", "n1"].map(track), 0));
+    await releaseStreams();
+
+    expect(nativeIds()).toEqual(["n0", "n1"]);
+    expect(player.queue.map((item) => item.Id)).toEqual(["n0", "n1"]);
+  });
+
+  test("a queue played while another still loads keeps only its own tracks", async () => {
+    await mount();
+    holdStreams("t2");
+    await run((p) => p.playQueue(ALBUM, 0));
+    expect(nativeIds()).toEqual(["t0", "t1"]);
+
+    await run((p) => p.playQueue(["n0", "n1"].map(track), 0));
+    await releaseStreams();
+
+    expect(nativeIds()).toEqual(["n0", "n1"]);
+  });
+
+  test("a stopped player gets no tracks from the load that was running", async () => {
+    await mount();
+    holdStreams("t2");
+    await run((p) => p.playQueue(ALBUM, 0));
+
+    await run((p) => p.stop());
+    await releaseStreams();
+
+    expect(nativeIds()).toEqual([]);
+  });
+
+  test("a cleared queue gets no tracks from the load that was running", async () => {
+    await mount();
+    holdStreams("t2");
+    await run((p) => p.playQueue(ALBUM, 0));
+
+    await run((p) => p.clearQueue());
+    await releaseStreams();
+
+    expect(nativeIds()).toEqual(["t0"]);
+    expect(player.queue.map((item) => item.Id)).toEqual(["t0"]);
   });
 
   // Same report, the other way in: a queue restored after a restart is only
@@ -1318,6 +2753,45 @@ describe("MusicPlayerProvider native player setup", () => {
     expect(player.isPlaying).toBe(true);
   });
 
+  // A stop while that resume read where the service stands: the resume went on to report the start of a
+  // track the stop had just removed, and the server listed a play nobody had.
+  test("a stop during the resume's progress read reports no start", async () => {
+    persistQueue(ALBUM, 2);
+    await mount();
+    mockNative.queue = [{ id: "t2" }];
+    mockNative.activeIndex = 0;
+    mockNative.beforeProgress = async () => {
+      mockNative.beforeProgress = undefined;
+      await player.stop();
+    };
+
+    await run((p) => p.resume());
+    await settle();
+
+    expect(reports(START_URL)).toHaveLength(0);
+  });
+
+  // A newer start while that resume read where the service stands: the resume still reported the start of the track
+  // it found and put that track back on screen, while the player went on with the newer queue.
+  test("a newer start during the resume's progress read wins over the resume", async () => {
+    persistQueue(ALBUM, 2);
+    await mount();
+    mockNative.queue = [{ id: "t2" }];
+    mockNative.activeIndex = 0;
+    mockNative.beforeProgress = async () => {
+      mockNative.beforeProgress = undefined;
+      await player.playQueue(ALBUM, 3);
+    };
+
+    await run((p) => p.resume());
+    await settle();
+
+    expect(reports(START_URL).map((report) => report.ItemId)).not.toContain(
+      "t2",
+    );
+    expect(player.currentTrack?.Id).toBe("t3");
+  });
+
   // A start waiting on the setup would otherwise resume behind the reset a
   // stop just ran and play a queue that no longer exists.
   test("a stop cancels a start still waiting on the setup", async () => {
@@ -1338,7 +2812,139 @@ describe("MusicPlayerProvider native player setup", () => {
   });
 });
 
-const STOPPED_URL = "https://jellyfin.example.com/Sessions/Playing/Stopped";
+describe("MusicPlayerProvider and the server's reports of a play on the phone", () => {
+  // Seen on an iPhone simulator (15/11): Play on the queue the app restored at launch played it, and the server never
+  // heard of it; only the heartbeats named it, with no start.
+  test("a queue restored at launch reports its start once played", async () => {
+    persistQueue(ALBUM, 1);
+    await mount();
+
+    await run((p) => p.togglePlayPause());
+
+    await waitFor(() => expect(reports(START_URL)).toHaveLength(1));
+    expect(reports(START_URL)[0]).toMatchObject({
+      ItemId: "t1",
+      PlaySessionId: "session-t1",
+      IsPaused: false,
+    });
+  });
+
+  // The start of a resume said position 0: the server showed the track from its beginning until the next heartbeat,
+  // 10 s later (Android emulator, 15/11).
+  test("a restored queue's start reports where it resumes", async () => {
+    persistQueue(ALBUM, 1);
+    storage.set("music_player_progress", "42");
+    await mount();
+
+    await run((p) => p.togglePlayPause());
+
+    await waitFor(() => expect(reports(START_URL)).toHaveLength(1));
+    expect(reports(START_URL)[0]).toMatchObject({
+      ItemId: "t1",
+      PositionTicks: 42 * 10_000_000,
+    });
+  });
+
+  test("the start of the track a surviving service holds reports where it stands", async () => {
+    persistQueue(ALBUM, 2);
+    storage.set("music_player_progress", "12");
+    await mount();
+    mockNative.queue = [{ id: "t2" }];
+    mockNative.activeIndex = 0;
+    // The service may have played on after the app went: its position is the one that plays.
+    mockNative.position = 61;
+
+    await run((p) => p.resume());
+
+    await waitFor(() => expect(reports(START_URL)).toHaveLength(1));
+    expect(reports(START_URL)[0]).toMatchObject({
+      ItemId: "t2",
+      PositionTicks: 61 * 10_000_000,
+    });
+  });
+
+  // The heartbeat goes every 10 s of playback, and a paused track plays none: the server showed it playing long after
+  // the pause (n° 14). A downloaded track plays without a play session id, and its start is reported all the same.
+  test.each([
+    ["streamed", null],
+    ["downloaded", "file:///music/track-1.flac"],
+  ])("a pause of a %s track is reported at once", async (_, localPath) => {
+    if (localPath) mockLocalPaths.set("track-1", localPath);
+    await startPlaying();
+    const before = reports(PROGRESS_URL).length;
+
+    await run((p) => p.togglePlayPause());
+
+    await waitFor(() => expect(reports(PROGRESS_URL)).toHaveLength(before + 1));
+    expect(reports(PROGRESS_URL)[before]).toMatchObject({
+      ItemId: "track-1",
+      IsPaused: true,
+    });
+
+    await run((p) => p.togglePlayPause());
+
+    await waitFor(() => expect(reports(PROGRESS_URL)).toHaveLength(before + 2));
+    expect(reports(PROGRESS_URL)[before + 1]).toMatchObject({
+      IsPaused: false,
+    });
+  });
+
+  // The lock screen, the notification and a headset pause the native player itself: the app hears it from the state.
+  test("a pause made outside the app is reported at once", async () => {
+    await startPlaying();
+    const before = reports(PROGRESS_URL).length;
+
+    await run((p) => p.setIsPlaying(false));
+
+    await waitFor(() => expect(reports(PROGRESS_URL)).toHaveLength(before + 1));
+    expect(reports(PROGRESS_URL)[before]).toMatchObject({ IsPaused: true });
+  });
+
+  // A skip reports the track it leaves stopped, and the next one plays on with its heartbeats and no start of its
+  // own: the pauses of that one went unreported again (n° 14).
+  test.each([
+    ["next", (p: Player) => p.next(), "t1"],
+    ["previous", (p: Player) => p.previous(), "t4"],
+    ["a jump", (p: Player) => p.jumpToIndex(3), "t3"],
+  ])("a pause after %s is reported at once", async (_, skip, itemId) => {
+    storage.set("music_player_repeat_mode", "all");
+    await mount();
+    await run((p) => p.playQueue(ALBUM, 0));
+    await run(skip);
+    expect(reports(STOPPED_URL)).toHaveLength(1);
+    const before = reports(PROGRESS_URL).length;
+
+    await run((p) => p.togglePlayPause());
+
+    await waitFor(() => expect(reports(PROGRESS_URL)).toHaveLength(before + 1));
+    expect(reports(PROGRESS_URL)[before]).toMatchObject({
+      ItemId: itemId,
+      IsPaused: true,
+    });
+  });
+
+  // The receiver's pause is the receiver's to report: the phone's session ended when the queue left it.
+  test.each([
+    ["streamed", null],
+    ["downloaded", "file:///music/t0.flac"],
+  ])(
+    "a pause on the receiver of a %s track reports nothing for the phone",
+    async (_, localPath) => {
+      if (localPath) mockLocalPaths.set("t0", localPath);
+      await mount();
+      await run((p) => p.playQueue(ALBUM, 0));
+      await connectCast();
+      await settle();
+      await receiverLoads("t0");
+      const before = reports(PROGRESS_URL).length;
+
+      await run((p) => p.setIsPlaying(false));
+      await settle();
+
+      expect(reports(PROGRESS_URL)).toHaveLength(before);
+    },
+  );
+});
 
 describe("MusicPlayerProvider stop report of a new start", () => {
   /** Plays the track on to `seconds`, the way the playback engine reports it. */

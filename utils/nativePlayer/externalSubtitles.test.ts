@@ -6,17 +6,11 @@ import type {
 } from "@jellyfin/sdk/lib/generated-client";
 import { CACHE, fakeFiles } from "@/test-utils/fileSystem";
 
-jest.mock(
-  "expo-file-system",
-  () => jest.requireActual("@/test-utils/fileSystem").fileSystemModule,
-);
 // The custom-header barrel touches MMKV and SecureStore; the shared double
 // keeps the pure helpers real.
 jest.mock("@/utils/customHeaders", () =>
   jest.requireActual("@/test-utils/customHeaders").customHeadersModule(),
 );
-// The log module reaches Sentry and MMKV; the prefetch only writes its summary.
-jest.mock("@/utils/log", () => ({ writeInfoLog: jest.fn() }));
 
 const { File } = jest.requireActual("@/test-utils/fileSystem")
   .fileSystemModule as typeof import("@/test-utils/fileSystem")["fileSystemModule"];
@@ -257,6 +251,18 @@ describe("localSubtitleFileName", () => {
         "https://subs.example/3",
       ),
     ).toMatch(/^item-1-ms-1-3-[0-9a-f]{8}\.srt$/);
+  });
+
+  test("path characters in the server's ids stay inside one file name", () => {
+    const name = localSubtitleFileName(
+      { ...item, Id: "../../../Documents/private" } as BaseItemDto,
+      "../payload",
+      externalSub({ Index: "../x" as unknown as number }),
+      REMOTE_URL,
+    );
+    expect(name).toMatch(
+      /^_________Documents_private-___payload-___x-[0-9a-f]{8}\.srt$/,
+    );
   });
 });
 
