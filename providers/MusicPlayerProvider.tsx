@@ -2767,21 +2767,21 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     ],
   );
 
+  // While a receiver has the queue, rows mark what it plays, as `value` does.
+  // Its fields, not remoteView itself: the view is new on every position update.
+  const trackCurrent = remoteView
+    ? remoteView.currentTrack
+    : state.currentTrack;
+  const trackIsPlaying = remoteView ? remoteView.isPlaying : state.isPlaying;
   const trackValue = useMemo(
     () => ({
-      currentTrack: state.currentTrack,
-      isPlaying: state.isPlaying,
+      currentTrack: trackCurrent,
+      isPlaying: trackIsPlaying,
       loadingTrackId: state.loadingTrackId,
       playTrack,
       playQueue,
     }),
-    [
-      state.currentTrack,
-      state.isPlaying,
-      state.loadingTrackId,
-      playTrack,
-      playQueue,
-    ],
+    [trackCurrent, trackIsPlaying, state.loadingTrackId, playTrack, playQueue],
   );
 
   return (

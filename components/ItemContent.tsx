@@ -51,11 +51,7 @@ import { ItemHeader } from "./ItemHeader";
 import { ItemTechnicalDetails } from "./ItemTechnicalDetails";
 import { PlayInRemoteSessionButton } from "./PlayInRemoteSession";
 
-// The Mac build carries no Cast (no SDK slice for Catalyst).
-const Chromecast =
-  Platform.isTV || (Platform.OS === "ios" && Platform.isMacCatalyst)
-    ? null
-    : require("./Chromecast");
+const Chromecast = !Platform.isTV ? require("./Chromecast") : null;
 const ItemContentTV = Platform.isTV
   ? require("./ItemContent.tv").ItemContentTV
   : null;
@@ -183,7 +179,7 @@ const ItemContentMobile: React.FC<ItemContentProps> = ({
         headerRight: () =>
           item && (
             <HeaderButtonGroup>
-              {Chromecast && <Chromecast.Chromecast />}
+              <Chromecast.Chromecast />
               {/* A group plays from the server: a downloaded copy has
                   nothing to start one with. */}
               {item.Type !== "Program" && !isOffline && (

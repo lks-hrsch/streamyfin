@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react-native";
+import { Platform } from "react-native";
 import { Colors } from "@/constants/Colors";
 import {
   type CastDoubleState,
@@ -134,4 +135,21 @@ test("a press opens the expanded controls while the receiver plays", async () =>
   });
   await fireEvent.press(button);
   await waitFor(() => expect(mockCast.dialogs).toEqual(["expandedControls"]));
+});
+
+// The Mac build carries no Cast: a header button there would open nothing.
+test("draws nothing on the Mac", async () => {
+  Object.defineProperty(Platform, "isMacCatalyst", {
+    value: true,
+    configurable: true,
+  });
+  try {
+    await render(<Chromecast />);
+    expect(screen.queryByLabelText("accessibility.cast_button")).toBeNull();
+  } finally {
+    Object.defineProperty(Platform, "isMacCatalyst", {
+      value: false,
+      configurable: true,
+    });
+  }
 });

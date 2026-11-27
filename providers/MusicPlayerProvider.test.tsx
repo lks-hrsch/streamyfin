@@ -303,9 +303,11 @@ const settle = async () => {
 
 type Player = ReturnType<typeof useMusicPlayer>;
 let player: Player;
+let trackView: ReturnType<typeof useMusicPlayerTrack>;
 
 const Probe = () => {
   player = useMusicPlayer();
+  trackView = useMusicPlayerTrack();
   return (
     <Text>{`${player.repeatMode} ${player.shuffleEnabled ? "shuffled" : "sorted"}`}</Text>
   );
@@ -934,6 +936,18 @@ describe("MusicPlayerProvider and a Cast session", () => {
     await receiverStatus("t2", "playing", 3);
     expect(player.currentTrack?.Id).toBe("t2");
     expect(player.queueIndex).toBe(2);
+  });
+
+  // Track rows read the track context: they mark the track the receiver plays.
+  test("the track context follows the receiver too", async () => {
+    await castAlbum();
+
+    expect(trackView.currentTrack?.Id).toBe("t1");
+    expect(trackView.isPlaying).toBe(true);
+
+    await receiverStatus("t2", "paused", 3);
+    expect(trackView.currentTrack?.Id).toBe("t2");
+    expect(trackView.isPlaying).toBe(false);
   });
 
   // The receiver reports its position when its state changes: in between,

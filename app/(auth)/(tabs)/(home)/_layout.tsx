@@ -10,11 +10,7 @@ import {
 } from "@/components/stacks/NestedTabPageStack";
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
 
-// The Mac build carries no Cast (no SDK slice for Catalyst).
-const Chromecast =
-  Platform.isTV || (Platform.OS === "ios" && Platform.isMacCatalyst)
-    ? null
-    : require("@/components/Chromecast");
+const Chromecast = Platform.isTV ? null : require("@/components/Chromecast");
 
 // Keeps cold boot on the Home tab.
 //
@@ -56,7 +52,7 @@ export default function IndexLayout() {
           headerRight: () =>
             Platform.isTV ? null : (
               <HeaderButtonGroup>
-                {Chromecast && <Chromecast.Chromecast />}
+                <Chromecast.Chromecast />
                 <SyncPlayButton />
               </HeaderButtonGroup>
             ),

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { Platform } from "react-native";
 import { Colors } from "@/constants/Colors";
 import {
   CastState,
@@ -32,6 +33,9 @@ export function Chromecast(props: Props) {
       logAndCaptureError("Chromecast discovery failed to start", error);
     });
   }, []);
+
+  // The Mac build carries no Cast (the SDK has no Catalyst slice).
+  if (Platform.OS === "ios" && Platform.isMacCatalyst) return null;
 
   return (
     <HeaderButton

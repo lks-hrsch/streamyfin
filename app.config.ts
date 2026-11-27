@@ -67,7 +67,7 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig => {
       ]);
     }
 
-    // expo-camera does not build for Mac Catalyst (see react-native.config.js).
+    // expo-camera does not build for Mac Catalyst (see plugins/withMacCatalyst.ts).
     if (!isMacCatalyst) {
       config.plugins?.push([
         "expo-camera",
