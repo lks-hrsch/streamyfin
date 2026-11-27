@@ -5,6 +5,7 @@ import type {
 import { getLibraryApi } from "@jellyfin/sdk/lib/utils/api";
 import { useQuery } from "@tanstack/react-query";
 import { useAtom } from "jotai";
+import { PEOPLE_STALE_TIME_MS } from "@/constants/People";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 
 export const useItemPeopleQuery = (
@@ -29,7 +30,7 @@ export const useItemPeopleQuery = (
       return Array.isArray(people) ? people : [];
     },
     enabled: !!api && !!user?.Id && !!itemId && enabled,
-    staleTime: 10 * 60 * 1000,
+    staleTime: PEOPLE_STALE_TIME_MS,
     refetchOnMount: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,

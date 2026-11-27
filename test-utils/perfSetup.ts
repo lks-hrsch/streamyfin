@@ -67,10 +67,42 @@ jest.mock("@/modules", () => {
       addProgressListener: () => ({ remove: () => {} }),
       addCompleteListener: () => ({ remove: () => {} }),
       addErrorListener: () => ({ remove: () => {} }),
+      addPausedListener: () => ({ remove: () => {} }),
+      addResumedListener: () => ({ remove: () => {} }),
       setLiveActivityEnabled: () => {},
     },
   };
 });
+
+// react-native's index exports each API through a getter that calls require()
+// on every read, and a render reads View, Text, Platform or StyleSheet over and
+// over. On a device that require is a lookup by module id; in Jest 30 it runs
+// the module resolver again each time, and that was most of the time
+// MusicPlayer's render phase gained with SDK 58, a cost no device pays. Each
+// getter keeps its first answer for the rest of the spec file. That answer is
+// still taken on first read, after the spec's own mocks, so a jest.mock of a
+// react-native module still reaches the export.
+const reactNative = jest.requireActual<object>("react-native");
+for (const [name, descriptor] of Object.entries(
+  Object.getOwnPropertyDescriptors(reactNative),
+)) {
+  const resolve = descriptor.get;
+  if (!resolve || !descriptor.configurable) continue;
+  let resolved = false;
+  let value: unknown;
+  Object.defineProperty(reactNative, name, {
+    configurable: true,
+    enumerable: descriptor.enumerable,
+    get() {
+      if (!resolved) {
+        // Set after the call: an export whose getter throws keeps throwing.
+        value = resolve.call(reactNative);
+        resolved = true;
+      }
+      return value;
+    },
+  });
+}
 
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ["performance"] });

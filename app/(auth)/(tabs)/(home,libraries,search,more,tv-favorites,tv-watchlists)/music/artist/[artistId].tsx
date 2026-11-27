@@ -25,7 +25,7 @@ import { MusicTrackItem } from "@/components/music/MusicTrackItem";
 import { PlaylistPickerSheet } from "@/components/music/PlaylistPickerSheet";
 import { TrackOptionsSheet } from "@/components/music/TrackOptionsSheet";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
-import { useMusicPlayer } from "@/providers/MusicPlayerProvider";
+import { useMusicPlayerTrack } from "@/providers/MusicPlayerProvider";
 import { squareArtworkSide } from "@/utils/artworkSize";
 import { getPrimaryImageUrl } from "@/utils/jellyfin/image/getPrimaryImageUrl";
 
@@ -39,7 +39,9 @@ export default function ArtistDetailScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { t } = useTranslation();
-  const { playQueue } = useMusicPlayer();
+  // Not useMusicPlayer(): this page would re-render on every progress update,
+  // and its inline renderItem would re-render every visible row with it.
+  const { playQueue } = useMusicPlayerTrack();
   const windowSize = useWindowDimensions();
   // The square follows the window's short side, see utils/artworkSize.ts.
   const artworkSize = squareArtworkSide(windowSize, { ratio: 0.4 });

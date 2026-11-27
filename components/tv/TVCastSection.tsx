@@ -5,6 +5,7 @@ import {
   TVFocusGuideView,
   View,
   type ViewInstance,
+  type ViewStyle,
 } from "react-native";
 import { Text } from "@/components/common/Text";
 import { useScaledTVSizes } from "@/constants/TVSizes";
@@ -22,6 +23,11 @@ export interface TVCastSectionProps {
   upwardFocusDestination?: ViewInstance | null;
   /** Custom horizontal padding (overrides default 80) */
   horizontalPadding?: number;
+  /** Keeps the remote off the cards, as while a modal covers the page. */
+  disabled?: boolean;
+  /** Indents the heading to line up with the page's other headings. */
+  titleInset?: number;
+  style?: ViewStyle;
 }
 
 export const TVCastSection: React.FC<TVCastSectionProps> = React.memo(
@@ -32,6 +38,9 @@ export const TVCastSection: React.FC<TVCastSectionProps> = React.memo(
     firstActorRefSetter,
     upwardFocusDestination,
     horizontalPadding = 80,
+    disabled = false,
+    titleInset = 0,
+    style,
   }) => {
     const typography = useScaledTVTypography();
     const sizes = useScaledTVSizes();
@@ -42,13 +51,14 @@ export const TVCastSection: React.FC<TVCastSectionProps> = React.memo(
     }
 
     return (
-      <View style={{ marginBottom: 40 }}>
+      <View style={[{ marginBottom: 40 }, style]}>
         <Text
           style={{
             fontSize: typography.heading,
             fontWeight: "600",
             color: "#FFFFFF",
             marginBottom: 24,
+            marginLeft: titleInset,
           }}
         >
           {t("item_card.cast")}
@@ -76,6 +86,7 @@ export const TVCastSection: React.FC<TVCastSectionProps> = React.memo(
               ref={index === 0 ? firstActorRefSetter : undefined}
               person={person}
               apiBasePath={apiBasePath}
+              disabled={disabled}
               onPress={() => onActorPress(person.Id)}
             />
           ))}

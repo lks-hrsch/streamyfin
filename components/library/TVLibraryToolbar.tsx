@@ -10,15 +10,13 @@ import {
 import { Text } from "@/components/common/Text";
 import { TVButton } from "@/components/tv/TVButton";
 import { useScaledTVTypography } from "@/constants/TVTypography";
-import { requestTVFocus } from "@/utils/requestTVFocus";
+import { useTVFocusRestore } from "@/hooks/useTVFocusRestore";
 import { scaleSize } from "@/utils/scaleSize";
 
 // One fixed width for every action: neighbours of uneven size read as a
 // rendering bug on TV, and the labels differ in length in every language.
 const ACTION_WIDTH = scaleSize(210);
 const DISABLED_OPACITY = 0.4;
-// Long enough for the sheet's route to have left the screen.
-const FOCUS_RESTORE_DELAY_MS = 300;
 
 export interface TVLibraryToolbarAction {
   key: string;
@@ -66,6 +64,7 @@ export const TVLibraryToolbar: React.FC<Props> = ({
 }) => {
   const typography = useScaledTVTypography();
   const buttons = useRef<Record<string, ViewInstance | null>>({});
+  const restoreFocus = useTVFocusRestore();
 
   // A disabled Play all cannot take preferred focus while the movie grid loads;
   // tvOS can then fall back to Home's native tab (docs/conventions/tv.md).
@@ -79,12 +78,8 @@ export const TVLibraryToolbar: React.FC<Props> = ({
 
   useEffect(() => {
     if (!focusRequest) return;
-    const timer = setTimeout(
-      () => requestTVFocus(buttons.current[focusRequest.key]),
-      FOCUS_RESTORE_DELAY_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [focusRequest]);
+    return restoreFocus(() => buttons.current[focusRequest.key]);
+  }, [focusRequest, restoreFocus]);
 
   return (
     <View style={{ paddingBottom: scaleSize(24) }}>

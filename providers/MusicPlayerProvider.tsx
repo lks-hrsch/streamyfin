@@ -11,6 +11,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -207,9 +208,46 @@ export const useMusicPlayer = () => {
   return context;
 };
 
+/**
+ * What a track list needs from the player: the track playing or loading, and
+ * how to start playback. It leaves the position out: that changes every second
+ * while a track plays, and every row reading the whole player re-rendered with
+ * it.
+ */
+type MusicPlayerTrackContextType = Pick<
+  MusicPlayerContextType,
+  "currentTrack" | "isPlaying" | "loadingTrackId" | "playTrack" | "playQueue"
+>;
+
+const MusicPlayerTrackContext = createContext<
+  MusicPlayerTrackContextType | undefined
+>(undefined);
+
+/**
+ * The player as a track row or a track list page sees it. Read this rather
+ * than useMusicPlayer() in anything rendered once per track.
+ */
+export const useMusicPlayerTrack = () => {
+  const context = useContext(MusicPlayerTrackContext);
+  if (!context) {
+    throw new Error(
+      "useMusicPlayerTrack must be used within MusicPlayerProvider",
+    );
+  }
+  return context;
+};
+
 interface MusicPlayerProviderProps {
   children: ReactNode;
 }
+
+const tvTrackValue: MusicPlayerTrackContextType = {
+  currentTrack: null,
+  isPlaying: false,
+  loadingTrackId: null,
+  playTrack: noop,
+  playQueue: noop,
+};
 
 // Stub provider for tvOS - music playback is not supported
 const TVMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
@@ -250,7 +288,9 @@ const TVMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
 
   return (
     <MusicPlayerContext.Provider value={value}>
-      {children}
+      <MusicPlayerTrackContext.Provider value={tvTrackValue}>
+        {children}
+      </MusicPlayerTrackContext.Provider>
     </MusicPlayerContext.Provider>
   );
 };
@@ -567,6 +607,9 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
   // The latest written position: a resume finishing its own waits seeks to
   // this, not to what its render saw.
   const progressRef = useRef(0);
+  // Whether the phone plays, for castOnReceiver: it sits under playTrack and
+  // playQueue, which must stay the same across a pause.
+  const isPlayingRef = useRef(false);
   // Which start put the spinner up: two starts of the same track share its
   // loadingTrackId, so the id alone cannot tell them apart.
   const loadingStartSeqRef = useRef(0);
@@ -604,9 +647,16 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     trackMediaInfoMap: {},
   });
 
-  useEffect(() => {
+  // A layout effect, so the ref holds the position the screen shows from the
+  // commit on: playTrack and playQueue read it in place of state.progress, and
+  // a tap can land before the passive effects of that commit have run.
+  useLayoutEffect(() => {
     progressRef.current = state.progress;
   }, [state.progress]);
+
+  useLayoutEffect(() => {
+    isPlayingRef.current = state.isPlaying;
+  }, [state.isPlaying]);
 
   const lastReportRef = useRef<number>(0);
 
@@ -1375,9 +1425,11 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     phoneSessionOpenRef.current = false;
     const sessionId = state.playSessionId;
     if (!state.currentTrack || (!sessionId && !open)) return;
+    // The ref, not state.progress: through castTapped this is a dependency of
+    // playTrack and playQueue, which the track context hands every row.
     reportPlaybackStopped(
       state.currentTrack,
-      state.progress * 10000000,
+      progressRef.current * 10000000,
       sessionId,
     );
     if (!sessionId) return;
@@ -1386,12 +1438,7 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
         ? { ...prev, playSessionId: null }
         : prev,
     );
-  }, [
-    state.currentTrack,
-    state.playSessionId,
-    state.progress,
-    reportPlaybackStopped,
-  ]);
+  }, [state.currentTrack, state.playSessionId, reportPlaybackStopped]);
 
   // A connected Cast session plays the music on the receiver, and the phone
   // stops so that one place plays. The player shows the queue from the send.
@@ -1407,7 +1454,7 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
       // Read before the pause: the account can switch while the phone stops.
       const generation = sessionGenerationRef.current;
       const isStale = () => generation !== sessionGenerationRef.current;
-      if (TrackPlayer && state.isPlaying) {
+      if (TrackPlayer && isPlayingRef.current) {
         await TrackPlayer.pause();
         setState((prev) => ({ ...prev, isPlaying: false }));
       }
@@ -1425,13 +1472,7 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
       if (!started) endOnReceiver(sent);
       else if (handOff) endPhoneSessionForReceiver();
     },
-    [
-      castQueue,
-      state.isPlaying,
-      beginOnReceiver,
-      endOnReceiver,
-      endPhoneSessionForReceiver,
-    ],
+    [castQueue, beginOnReceiver, endOnReceiver, endPhoneSessionForReceiver],
   );
 
   // Connecting while the phone plays moves the queue to the receiver. A queue
@@ -1494,6 +1535,9 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     [castOnReceiver],
   );
 
+  // playTrack and playQueue read the position from the ref, not from state:
+  // depending on state.progress would make them new on every progress update,
+  // and with them the track context every row of a list reads.
   const playTrack = useCallback(
     (track: BaseItemDto, queue?: BaseItemDto[]) => {
       if (state.currentTrack && state.playSessionId) {
@@ -1501,7 +1545,7 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
         phoneSessionOpenRef.current = false;
         reportPlaybackStopped(
           state.currentTrack,
-          state.progress * 10000000,
+          progressRef.current * 10000000,
           state.playSessionId,
         );
       }
@@ -1520,7 +1564,6 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     [
       state.currentTrack,
       state.playSessionId,
-      state.progress,
       reportPlaybackStopped,
       loadAndPlayQueue,
       castReady,
@@ -1537,7 +1580,7 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
         phoneSessionOpenRef.current = false;
         reportPlaybackStopped(
           state.currentTrack,
-          state.progress * 10000000,
+          progressRef.current * 10000000,
           state.playSessionId,
         );
       }
@@ -1574,7 +1617,6 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     [
       state.currentTrack,
       state.playSessionId,
-      state.progress,
       state.shuffleEnabled,
       reportPlaybackStopped,
       loadAndPlayQueue,
@@ -2725,9 +2767,28 @@ const MobileMusicPlayerProvider: React.FC<MusicPlayerProviderProps> = ({
     ],
   );
 
+  const trackValue = useMemo(
+    () => ({
+      currentTrack: state.currentTrack,
+      isPlaying: state.isPlaying,
+      loadingTrackId: state.loadingTrackId,
+      playTrack,
+      playQueue,
+    }),
+    [
+      state.currentTrack,
+      state.isPlaying,
+      state.loadingTrackId,
+      playTrack,
+      playQueue,
+    ],
+  );
+
   return (
     <MusicPlayerContext.Provider value={value}>
-      {children}
+      <MusicPlayerTrackContext.Provider value={trackValue}>
+        {children}
+      </MusicPlayerTrackContext.Provider>
     </MusicPlayerContext.Provider>
   );
 };

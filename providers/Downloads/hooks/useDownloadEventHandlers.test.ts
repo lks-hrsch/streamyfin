@@ -4,6 +4,8 @@ import { toast } from "sonner-native";
 import type {
   DownloadCompleteEvent,
   DownloadErrorEvent,
+  DownloadPausedEvent,
+  DownloadResumedEvent,
   DownloadStartedEvent,
 } from "@/modules";
 import { DOCUMENTS, fakeFiles } from "@/test-utils/fileSystem";
@@ -15,6 +17,8 @@ const mockListeners: {
   started?: (event: DownloadStartedEvent) => void;
   complete?: (event: DownloadCompleteEvent) => Promise<void>;
   error?: (event: DownloadErrorEvent) => Promise<void>;
+  paused?: (event: DownloadPausedEvent) => void;
+  resumed?: (event: DownloadResumedEvent) => void;
 } = {};
 const mockCancelDownload = jest.fn();
 jest.mock("@/modules", () => ({
@@ -22,6 +26,14 @@ jest.mock("@/modules", () => ({
     cancelDownload: (taskId: number) => mockCancelDownload(taskId),
     addStartedListener: (listener: typeof mockListeners.started) => {
       mockListeners.started = listener;
+      return { remove: () => {} };
+    },
+    addPausedListener: (listener: typeof mockListeners.paused) => {
+      mockListeners.paused = listener;
+      return { remove: () => {} };
+    },
+    addResumedListener: (listener: typeof mockListeners.resumed) => {
+      mockListeners.resumed = listener;
       return { remove: () => {} };
     },
     addProgressListener: () => ({ remove: () => {} }),
@@ -101,12 +113,12 @@ const started: DownloadStartedEvent = {
  */
 const listenerFor = async <K extends keyof typeof mockListeners>(
   name: K,
-  removeProcess = jest.fn(),
+  { removeProcess = jest.fn(), updateProcess = jest.fn() } = {},
 ) => {
   await renderHook(() =>
     useDownloadEventHandlers({
       processes: [],
-      updateProcess: jest.fn(),
+      updateProcess,
       removeProcess,
     }),
   );
@@ -124,6 +136,8 @@ const start = async (event: DownloadStartedEvent) =>
 beforeEach(() => {
   mockListeners.started = undefined;
   mockListeners.complete = undefined;
+  mockListeners.paused = undefined;
+  mockListeners.resumed = undefined;
   mockCancelDownload.mockClear();
   clearMmkv();
   // The database caches what it parsed, so emptying the store alone would not reset it.
@@ -262,7 +276,7 @@ describe("a download that fails", () => {
   it("removes the failed download card after its delay", async () => {
     savePendingDownload(record);
     const removeProcess = jest.fn();
-    const error = await listenerFor("error", removeProcess);
+    const error = await listenerFor("error", { removeProcess });
 
     await error(failed("HTTP error: 404"));
     expect(removeProcess).not.toHaveBeenCalled();
@@ -333,5 +347,94 @@ describe("a download that fails", () => {
       description: "The server could not convert Neverland.",
       duration: DOWNLOAD_FAILURE_TOAST_DURATION_MS,
     });
+  });
+});
+
+describe("a download that is interrupted", () => {
+  // iOS pauses a transfer that a network drop or a gateway's 403 cut short. It keeps its place in
+  // the native queue under the same task id until it goes on.
+  const paused: DownloadPausedEvent = {
+    taskId: 7,
+    error: "The network connection was lost.",
+    resumable: true,
+    itemId: "item-1",
+  };
+
+  it("pauses its record and card", async () => {
+    savePendingDownload(record);
+    const updateProcess = jest.fn();
+
+    (await listenerFor("paused", { updateProcess }))(paused);
+
+    expect(getPendingDownload("item-1")).toMatchObject({
+      status: "paused",
+      taskId: 7,
+    });
+    expect(updateProcess).toHaveBeenCalledWith("item-1", {
+      status: "paused",
+      speed: undefined,
+    });
+    expect(mockCancelDownload).not.toHaveBeenCalled();
+  });
+
+  // The paused entry would otherwise hold the head of the queue for a download nobody wants.
+  it("is cancelled when its record is already gone", async () => {
+    (await listenerFor("paused"))(paused);
+
+    expect(mockCancelDownload).toHaveBeenCalledWith(7);
+  });
+
+  it("is left alone when it is not a video download", async () => {
+    (await listenerFor("paused"))({ ...paused, itemId: undefined });
+
+    expect(mockCancelDownload).not.toHaveBeenCalled();
+  });
+});
+
+describe("a paused download that goes on", () => {
+  // It goes on under a new task. The record has to follow it, or a cancel would go to the dead
+  // task.
+  const resumed: DownloadResumedEvent = {
+    taskId: 8,
+    previousTaskId: 7,
+    resumed: false,
+    itemId: "item-1",
+  };
+
+  it("moves its record to the new task and downloads again", async () => {
+    savePendingDownload({ ...record, status: "paused" });
+    const updateProcess = jest.fn();
+
+    (await listenerFor("resumed", { updateProcess }))(resumed);
+
+    expect(getPendingDownload("item-1")).toMatchObject({
+      status: "downloading",
+      taskId: 8,
+    });
+    expect(updateProcess).toHaveBeenCalledWith("item-1", {
+      status: "downloading",
+      speed: undefined,
+      // Without resume data the transfer starts from the beginning.
+      progress: 0,
+      bytesDownloaded: 0,
+    });
+  });
+
+  it("keeps its progress when the transfer goes on where it stopped", async () => {
+    savePendingDownload({ ...record, status: "paused" });
+    const updateProcess = jest.fn();
+
+    (await listenerFor("resumed", { updateProcess }))({
+      ...resumed,
+      resumed: true,
+    });
+
+    expect(updateProcess.mock.calls[0][1]).not.toHaveProperty("progress");
+  });
+
+  it("is cancelled when its record is already gone", async () => {
+    (await listenerFor("resumed"))(resumed);
+
+    expect(mockCancelDownload).toHaveBeenCalledWith(8);
   });
 });

@@ -3,14 +3,18 @@ import { type ConfigPlugin, withPodfile } from "expo/config-plugins";
 interface GitPodOptions {
   podName: string;
   podspecUrl: string;
+  /** A local pod directory that replaces the podspec URL (the Mac build's MPVKit). */
+  path?: string;
 }
 
 const withGitPod: ConfigPlugin<GitPodOptions> = (
   config,
-  { podName, podspecUrl },
+  { podName, podspecUrl, path },
 ) => {
   return withPodfile(config, (config) => {
-    const podLine = `  pod '${podName}', :podspec => '${podspecUrl}'`;
+    const podLine = path
+      ? `  pod '${podName}', :path => '${path}'`
+      : `  pod '${podName}', :podspec => '${podspecUrl}'`;
 
     // Drop any existing declaration for this pod before inserting. The guard
     // here used to compare the whole line, podspec URL included, so bumping the
@@ -25,10 +29,11 @@ const withGitPod: ConfigPlugin<GitPodOptions> = (
     );
     const podfile = config.modResults.contents.replace(existingPod, "");
 
-    // Insert after "use_expo_modules!"
+    // Insert after the "use_expo_modules!" call, arguments included: the Mac
+    // build passes it an exclude list (plugins/withMacCatalyst.ts).
     config.modResults.contents = podfile.replace(
-      "use_expo_modules!",
-      `use_expo_modules!\n${podLine}`,
+      /use_expo_modules!(\([^)]*\))?/,
+      (call) => `${call}\n${podLine}`,
     );
 
     return config;

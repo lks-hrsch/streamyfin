@@ -89,6 +89,17 @@ export const IssueTypeName: Record<IssueType, string> = {
   [IssueType.OTHER]: "Other",
 };
 
+/**
+ * The order the report issue sheets offer the types in, the phone's and the
+ * TV's alike, so the two cannot drift apart: Seerr's own numbering.
+ */
+export const ISSUE_TYPES: readonly IssueType[] = [
+  IssueType.VIDEO,
+  IssueType.AUDIO,
+  IssueType.SUBTITLES,
+  IssueType.OTHER,
+];
+
 /** `DiscoverSlider.type`: which row a slider draws. */
 export enum DiscoverSliderType {
   RECENTLY_ADDED = 1,
@@ -276,6 +287,16 @@ type CombinedCreditBody = Body<
 export type CombinedCredit = Omit<CombinedCreditBody, "cast"> & {
   cast?: PersonCreditCast[];
 };
+/**
+ * A TMDB collection and its films. See CORRECTIONS["GET /collection/{collectionId}"]:
+ * upstream's `mapCollection` builds each part with the `mapMovieResult`
+ * Discover's films come from, so a part is the corrected MovieResult, the
+ * library's whole view of the film included.
+ */
+export type CollectionDetails = Always<
+  Omit<Schemas["Collection"], "parts"> & { parts?: MovieResult[] },
+  SentKeys<"CollectionDetails">
+>;
 export type GenreSliderItem = Always<
   Body<paths["/discover/genreslider/movie"]["get"]>[number],
   SentKeys<"GenreSliderItem">

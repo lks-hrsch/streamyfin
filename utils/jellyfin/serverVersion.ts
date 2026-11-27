@@ -52,6 +52,14 @@ export const supportsLanguageFilters = (version?: string | null) =>
   isServerMajorAtLeast(version, 12);
 
 /**
+ * Whether `/Persons` keeps to the people of the items under `parentId`, which
+ * Jellyfin 12 added. 10.11 and earlier have no such parameter and answer every
+ * person of the server, thousands of them, instead of the cast of a series.
+ */
+export const supportsPersonsUnderParent = (version?: string | null) =>
+  isServerMajorAtLeast(version, 12);
+
+/**
  * Whether `/Persons` applies `excludePersonTypes`. Jellyfin 10.11 reads the
  * parameter and then filters on the include list instead, so the exclusion
  * silently does nothing there; 12 fixed it.

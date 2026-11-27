@@ -16,7 +16,7 @@ import {
   isPermanentlyDownloaded,
 } from "@/providers/AudioStorage";
 import { apiAtom } from "@/providers/JellyfinProvider";
-import { useMusicPlayer } from "@/providers/MusicPlayerProvider";
+import { useMusicPlayerTrack } from "@/providers/MusicPlayerProvider";
 import { getPrimaryImageUrl } from "@/utils/jellyfin/image/getPrimaryImageUrl";
 import { formatDuration } from "@/utils/time";
 
@@ -37,7 +37,7 @@ export const MusicTrackItem: React.FC<Props> = ({
 }) => {
   const [api] = useAtom(apiAtom);
   const { playTrack, currentTrack, isPlaying, loadingTrackId } =
-    useMusicPlayer();
+    useMusicPlayerTrack();
   const { isConnected, serverConnected } = useNetworkStatus();
   const haptic = useHaptic("light");
 

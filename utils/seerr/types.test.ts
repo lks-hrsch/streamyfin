@@ -1,7 +1,9 @@
 import {
+  type CollectionDetails,
   type CombinedCredit,
   DiscoverSliderType,
   type GenreSliderItem,
+  ISSUE_TYPES,
   IssueStatus,
   IssueType,
   IssueTypeName,
@@ -48,6 +50,16 @@ describe("the values the spec serves as plain numbers", () => {
     expect(IssueTypeName[IssueType.SUBTITLES]).toBe("Subtitle");
   });
 
+  // The phone and the TV both read this order; it is what the user sees.
+  test("offer every issue type once, video first", () => {
+    expect(ISSUE_TYPES.map((type) => IssueTypeName[type])).toEqual([
+      "Video",
+      "Audio",
+      "Subtitle",
+      "Other",
+    ]);
+  });
+
   test("discriminate a result by its media type", () => {
     expect(String(MediaType.MOVIE)).toBe("movie");
     expect(String(MediaType.TV)).toBe("tv");
@@ -83,6 +95,30 @@ describe("the types derived from the spec", () => {
 
     expect(credits.id).toBe(1);
     expect(genre.name).toBe("Drama");
+  });
+  // A part is a film as Discover's are, the library's whole view of it
+  // included, which the spec's own MediaInfo would not let it carry.
+  test("describe a collection and its films", () => {
+    const collection: CollectionDetails = {
+      id: 10,
+      name: "Star Wars Collection",
+      parts: [
+        {
+          id: 11,
+          mediaType: MediaType.MOVIE,
+          title: "Star Wars",
+          mediaInfo: {
+            id: 1,
+            tmdbId: 11,
+            status: MediaStatus.AVAILABLE,
+            mediaType: MediaType.MOVIE,
+            jellyfinMediaId: "abc",
+          },
+        },
+      ],
+    };
+
+    expect(collection.parts?.[0].mediaInfo?.status).toBe(MediaStatus.AVAILABLE);
   });
 });
 

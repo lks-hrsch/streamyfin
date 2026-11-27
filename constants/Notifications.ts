@@ -45,7 +45,7 @@ export const SESSIONS_TASK_INTERVAL_KEY = "sessionsTaskIntervalMinutes";
  * (`expo.extra.eas.projectId`) is the canonical source; the string is repeated
  * here because token fetches need it at runtime.
  */
-export const EXPO_PROJECT_ID = "e79219d1-797f-4fbe-9fa1-cfd360690a68";
+export const EXPO_PROJECT_ID = "b78a645d-e215-4e46-b03b-222e9bbb2142";
 
 /** Set once the app asked for notifications, so it asks once per install. */
 export const PERMISSION_ASKED_KEY = "hasAskedForNotificationPermission";

@@ -47,6 +47,12 @@ describe("touchedByRequest", () => {
     expect(touched(["seerr", "person", "17419"])).toBe(true);
   });
 
+  // A film requested from a library collection's missing ones shows its new
+  // status there once the user is back on the collection.
+  test("takes a collection's films", () => {
+    expect(touched(["seerr", "collection", 10])).toBe(true);
+  });
+
   // A request spends the quota and a decline gives it back. A refusal can
   // mean the sheet's quota was out of date: it stays open, to be read again.
   test("takes the quota", () => {

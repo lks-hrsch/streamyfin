@@ -23,6 +23,7 @@ import { ParallaxScrollView } from "@/components/ParallaxPage";
 import { PlayButton } from "@/components/PlayButton";
 import { PlayedStatus } from "@/components/PlayedStatus";
 import { SimilarItems } from "@/components/SimilarItems";
+import { LibraryIssueButton } from "@/components/seerr/LibraryIssueButton";
 import { CurrentSeries } from "@/components/series/CurrentSeries";
 import { SeasonEpisodesCarousel } from "@/components/series/SeasonEpisodesCarousel";
 import { SyncPlayButton } from "@/components/syncplay/SyncPlayButton";
@@ -50,7 +51,11 @@ import { ItemHeader } from "./ItemHeader";
 import { ItemTechnicalDetails } from "./ItemTechnicalDetails";
 import { PlayInRemoteSessionButton } from "./PlayInRemoteSession";
 
-const Chromecast = !Platform.isTV ? require("./Chromecast") : null;
+// The Mac build carries no Cast (no SDK slice for Catalyst).
+const Chromecast =
+  Platform.isTV || (Platform.OS === "ios" && Platform.isMacCatalyst)
+    ? null
+    : require("./Chromecast");
 const ItemContentTV = Platform.isTV
   ? require("./ItemContent.tv").ItemContentTV
   : null;
@@ -178,7 +183,7 @@ const ItemContentMobile: React.FC<ItemContentProps> = ({
         headerRight: () =>
           item && (
             <HeaderButtonGroup>
-              <Chromecast.Chromecast />
+              {Chromecast && <Chromecast.Chromecast />}
               {/* A group plays from the server: a downloaded copy has
                   nothing to start one with. */}
               {item.Type !== "Program" && !isOffline && (
@@ -321,6 +326,9 @@ const ItemContentMobile: React.FC<ItemContentProps> = ({
                     colors={itemColors}
                   />
                 )}
+                {/* Last, as on the Seerr page: it opens a sheet of its own
+                    rather than playing anything. */}
+                <LibraryIssueButton item={item} leadingGap={12} />
               </View>
             ) : (
               <Text className='mb-2 text-neutral-400'>

@@ -257,6 +257,11 @@ describe("unrequestedSeasons", () => {
     );
     expect(unrequestedSeasons(details)).toEqual([1, 2]);
   });
+
+  // The library's own page knows more than Seerr until Seerr's next scan.
+  test("leaves out a season the library holds, when the page says so", () => {
+    expect(unrequestedSeasons(show(), { held: new Set([1]) })).toEqual([2]);
+  });
 });
 
 describe("toggleSeason", () => {
@@ -449,6 +454,25 @@ describe("seasonRows", () => {
       badge: "not_requested",
       locked: false,
     });
+  });
+
+  test("shows a season the library holds as available, whatever Seerr says", () => {
+    const details = show(
+      media({
+        requests: [
+          {
+            ...request([[2, MediaRequestStatus.PENDING]]),
+            status: MediaRequestStatus.PENDING,
+          },
+        ],
+      }),
+    );
+    const held = new Set([1, 2]);
+    expect(rowOf(details, 1)).toMatchObject({ badge: "not_requested" });
+    expect(seasonRows(details, { held })).toEqual([
+      { seasonNumber: 1, episodeCount: 10, badge: "available", locked: true },
+      { seasonNumber: 2, episodeCount: 10, badge: "available", locked: true },
+    ]);
   });
 });
 

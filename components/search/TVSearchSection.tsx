@@ -9,7 +9,8 @@ import { useScaledTVPosterSizes } from "@/constants/TVPosterSizes";
 import { useScaledTVSizes } from "@/constants/TVSizes";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 
-const SCALE_PADDING = 20;
+/** The room above and below a row for its focused poster to grow into. */
+export const SCALE_PADDING = 20;
 
 interface TVSearchSectionProps extends ViewProps {
   title: string;

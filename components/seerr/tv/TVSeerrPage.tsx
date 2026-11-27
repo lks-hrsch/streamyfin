@@ -39,7 +39,11 @@ import { useSeerrRequestOffer } from "@/hooks/useSeerrRequestOffer";
 import { useTVIssueModal } from "@/hooks/useTVIssueModal";
 import { useTVRequestModal } from "@/hooks/useTVRequestModal";
 import { useTVSeasonSelectModal } from "@/hooks/useTVSeasonSelectModal";
-import { hasPermission, Permission } from "@/utils/seerr/permissions";
+import {
+  canCreateIssues,
+  hasPermission,
+  Permission,
+} from "@/utils/seerr/permissions";
 import { seasonsWithStatus } from "@/utils/seerr/seasons";
 import type {
   MediaRequest,
@@ -415,6 +419,10 @@ export const TVSeerrPage: React.FC = () => {
   );
 
   const hasJellyfinMedia = !!details?.mediaInfo?.jellyfinMediaId;
+  // Only for those Seerr takes an issue from: anyone else would fill in the
+  // sheet to be refused.
+  const offersIssueReport =
+    hasJellyfinMedia && canCreateIssues(seerrUser?.permissions);
   const requestedByName =
     pendingRequest?.requestedBy?.displayName ||
     pendingRequest?.requestedBy?.username ||
@@ -690,7 +698,7 @@ export const TVSeerrPage: React.FC = () => {
 
               {/* Report an issue in Seerr's yellow, as on the phone, shaped
                   like the buttons beside it. */}
-              {hasJellyfinMedia && details?.mediaInfo?.id !== undefined && (
+              {offersIssueReport && details?.mediaInfo?.id !== undefined && (
                 <TVButton
                   variant='warning'
                   onPress={() =>

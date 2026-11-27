@@ -40,7 +40,8 @@ Read the relevant one before writing code in that area.
 
 Deep dives: [tv-modal-guide.md](docs/tv-modal-guide.md),
 [tv-focus-guide.md](docs/tv-focus-guide.md), [tv-discovery.md](docs/tv-discovery.md),
-[nested-modals.md](docs/nested-modals.md), [custom-headers.md](docs/custom-headers.md).
+[nested-modals.md](docs/nested-modals.md), [custom-headers.md](docs/custom-headers.md),
+[ci.md](docs/ci.md) (release pipeline, Apple builds on the self-hosted Mac).
 
 ## Learned facts
 
@@ -72,6 +73,7 @@ State and data:
 - `shared-value-js-write-lands-later` | a shared value set from JS is applied later on the UI thread, the next JS read still gets the old one; keep JS-only state in a ref
 - `jellyfin-unknown-parent-answers-400` | GET /Items with a parentId the server no longer has is a 400 "Error processing request.", not a 404; a renamed library has a new id, and the cache restores the old one for a day. Not reported nor retried, one WARN line in the local log
 - `unobserved-query-reports-its-first-failure` | a query whose key changed under it has no observer left, so React Query cancels its retries and its first failure goes to Sentry; one failing request and an instant event in the breadcrumbs is that
+- `jellyfin-ids-query-skips-library-access` | GET /Items?ids= returns items of libraries the user may not open (12.2); an id from Seerr, Streamystats or Marlin is checked with GET /Items/{id}, which answers 404 for those
 - `polling-query-rewrites-persisted-cache` | a persisted query with `refetchInterval` re-serializes the whole persisted cache every tick, even when its data never changes (`withoutRedundantSaves` only skips the ticks of queries that are not persisted); enable it only while a consumer is focused, with `gcTime: 0`
 
 Native modules:
@@ -85,6 +87,7 @@ Native modules:
 - `engine-agnostic-native-chrome` | The native chrome holds a ChromeEngine (transport and queue faces, both platforms) and reaches rendering through a cast; the engine rides config.engine, an unknown one is refused at presentPlayer; resolvers split engine vs renderer; the phone chrome's controls follow ChromeCapabilities
 - `amlogic-dts-decoder-silent` | Amlogic's platform DTS decoder emits silence on DTS-HD without erroring; on bitstream-capable output DTS decode is steered to FFmpeg via dtsExcludingMediaCodecSelector (twin files)
 - `native-player-ignores-js-controls` | the iPhone/iPad default player is a presented native view controller; Controls.tsx and its hooks never mount there, so input (keyboard) needs a native counterpart
+- `download-failures-must-not-advance-the-queue` | An interrupted iOS download pauses in its queue slot and goes on on a network change, foreground or tap; failing through drained whole queues during VPN outages
 - `mpv-view-first-progress-tick-is-zero` | the MPV renderer emits its position cache once the duration is known; load() seeds it from startPosition, and JS player reports read resolveSessionPositionTicks, never progress.get()
 - `sentry-native-options-fail-silently` | sentry-cocoa ignores an option key it does not know, with no error; check the spelling in Options+Dictionary.swift
 - `avaudiosession-calls-block-on-the-audio-server` | every AVAudioSession setter AND getter is a synchronous XPC call that can take seconds; never on main, session changes go through PlayerAudioSession
@@ -119,6 +122,7 @@ TV platform:
 - `tv-preferred-focus-grabs-on-mount` | hasTVPreferredFocus takes the focus as the view enters the window, out of the tab bar too (tvOS when the bar lands on a tab, Android TV on every press that opens one); tab roots must not set it on mount, Home only once per session
 
 Build and tooling:
+- `mac-catalyst-build` | Mac app = iOS target on Catalyst (opt-in); derived MPVKit slice, Apple Silicon only, own sandbox entitlements, per-pod fixes and why
 - `eas-archive-drops-gitignored-tracked-files` | EAS uploads skip anything matching .gitignore even if tracked; re-include required assets, keep asset require() at module scope
 - `bun-test-discovery-leaks-fds` | bare `bun test` leaves ~14k fds open; child processes spawned from tests get dead stdio, so do the work in-process
 - `require-hooks-leak-across-jest-specs` | a require hook (tsx/cjs) registered from a spec stays on the Jest worker's Node loader and breaks later specs; map it to a stub
@@ -151,6 +155,11 @@ bun run prebuild:tv
 bun run ios:tv
 bun run android:tv
 
+# Mac (Mac Catalyst, Apple Silicon)
+bun run prebuild:mac
+bun run mac                  # Release build, opens the app; --debug loads JS from Metro
+bun run mac --archive        # Archive + App Store Connect export (--export-method, --upload)
+
 # Quality
 bun run typecheck            # TypeScript
 bun run check                # Biome, read only
@@ -164,6 +173,9 @@ bun run test                 # The full gate: typecheck, unit, e2e bench, lint, 
 
 # iOS specific
 bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build errors
+
+# Apple release (fastlane, run by .github/workflows/release.yml, see docs/ci.md)
+nix develop --command fastlane ios release target:ios dry_run:true   # target:ios|tvos|mac
 ```
 
 ## Stack
@@ -193,6 +205,7 @@ bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build er
 | `packages/` | Local shims resolved by Metro |
 | `targets/` | Extra native targets (top shelf, download activity) |
 | `plugins/` | Expo config plugins |
+| `fastlane/` | Apple release lanes (build number, signing, TestFlight upload) |
 | `patches/` | Patch package overrides |
 | `augmentations/` | Type augmentations |
 | `test-utils/` | Shared test doubles: Jellyfin API, MMKV, the file system, custom headers, React Native, Reanimated, @expo/ui, drax, the Cast module |
@@ -328,8 +341,10 @@ import { apiAtom } from "@/utils/atoms/api";
 
 ## Platform notes
 
-- Platform checks: `Platform.isTV`, `Platform.OS === "android" | "ios"`.
+- Platform checks: `Platform.isTV`, `Platform.OS === "android" | "ios"`, and for the Mac
+  build `Platform.OS === "ios" && Platform.isMacCatalyst`.
 - TV builds use the `:tv` script suffix.
-- Some features are off on TV, notifications and Chromecast among them.
+- Some features are off on TV, notifications and Chromecast among them. On the Mac:
+  Chromecast, the camera (companion QR login) and Live Activities.
 - The rest of the TV rules, covering focus, modals, typography and lists, live in
   [docs/conventions/tv.md](docs/conventions/tv.md). Read it before touching TV code.

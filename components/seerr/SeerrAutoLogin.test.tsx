@@ -142,6 +142,34 @@ describe("signing in to Seerr at launch", () => {
     expect(store.get(mockSeerrUserAtom)).toBeUndefined();
   });
 
+  // A session Seerr no longer has is forgotten by the client (useSeerr), which
+  // clears the user. A run that started signed in never spent its attempt, so
+  // it signs in again then, without a relaunch.
+  test("signs in again in the same run once a restored session is forgotten", async () => {
+    store.set(mockSeerrUserAtom, { id: 7 });
+    await renderAutoLogin();
+    expect(mockSignInWithQuickConnect).not.toHaveBeenCalled();
+
+    await act(async () => store.set(mockSeerrUserAtom, undefined));
+
+    expect(mockSignInWithQuickConnect).toHaveBeenCalledTimes(1);
+  });
+
+  // One attempt per run, also when it succeeded: a server that drops each new
+  // session at once would otherwise be signed in to in a loop. The next launch
+  // tries again.
+  test("waits for the next launch once this run's attempt is spent", async () => {
+    mockSignInWithQuickConnect.mockResolvedValue({ id: 7 });
+    await renderAutoLogin();
+    await waitFor(() =>
+      expect(store.get(mockSeerrUserAtom)).toEqual({ id: 7 }),
+    );
+
+    await act(async () => store.set(mockSeerrUserAtom, undefined));
+
+    expect(mockSignInWithQuickConnect).toHaveBeenCalledTimes(1);
+  });
+
   test("drops Quick Connect's session for an account that left before it was handed over", async () => {
     mockSignInWithQuickConnect.mockImplementation(async () => {
       store.set(userAtom, { Id: "next", Name: "sam" } as never);

@@ -77,9 +77,9 @@ export const SearchSortMenu = <T extends string>({
                 accessibilityLabel(t("library.filters.sort_by")),
               ]}
             >
-              {/* Built like the Library and Discover buttons, a body-sized
-                  label: the zero-width text gives the icon a line of text's
-                  height, so the three stay the same height at any text size. */}
+              {/* A body-sized label: the zero-width text gives the icon a
+                  line of text's height, so the button keeps the row's height
+                  at any text size. */}
               <HStack spacing={0}>
                 <Image
                   systemName='line.3.horizontal.decrease.circle'
@@ -190,10 +190,9 @@ const AndroidSearchSortMenu = <T extends string>({
               accessibilityLabel={t("library.filters.sort_by")}
               onPress={() => setOpen(true)}
             >
-              {/* Built like the Library and Discover tags beside it: the
-                  icon sits in a line of their text, and the spaces around it
-                  give that line their font's height, so the three share one
-                  height. Purple, as the old Sort by and Sort order buttons. */}
+              {/* The icon sits in a line of text, and the spaces around it
+                  give that line the font's height, as the app's other tags
+                  have. Purple, as the old Sort by and Sort order buttons. */}
               <View className='bg-purple-600 rounded-full px-2 py-1'>
                 <RNText className='p-1'>
                   {" "}

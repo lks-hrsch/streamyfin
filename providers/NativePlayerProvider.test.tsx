@@ -245,7 +245,6 @@ const mockT = (key: string) => key;
 const mockNoop = () => undefined;
 const mockSocket = {
   subscribe: () => mockNoop,
-  clearLastMessage: mockNoop,
   retainInBackground: () => mockNoop,
 };
 const mockSyncPlay = {

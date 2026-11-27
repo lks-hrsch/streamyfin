@@ -48,6 +48,7 @@ export const unstable_settings = {
 };
 
 const IS_ANDROID_TV = Platform.isTV && Platform.OS === "android";
+const IS_MAC_CATALYST = Platform.OS === "ios" && Platform.isMacCatalyst;
 
 function TVTabLayout() {
   const { t } = useTranslation();
@@ -158,13 +159,15 @@ export default function TabLayout() {
         <NativeTabs.Trigger
           name='(search)'
           // On tvOS the search role turns the tab into a bare magnifier; without
-          // it the tab keeps its label, as the TV bar always had.
-          role={Platform.isTV ? undefined : "search"}
+          // it the tab keeps its label, as the TV bar always had. In the Mac
+          // idiom UIKit's search tab is not selectable like the others (a click
+          // only highlights it), so the Mac build keeps Search an ordinary tab.
+          role={Platform.isTV || IS_MAC_CATALYST ? undefined : "search"}
           // A search tab that activates its field when selected is left when
           // the field closes: iOS goes back to the previous tab. Without the
           // activation iOS 27 folds the tab into the bar, hence prominent.
           disableAutomaticSearchActivation
-          prominent={!Platform.isTV}
+          prominent={!Platform.isTV && !IS_MAC_CATALYST}
           listeners={{ tabPress: () => eventBus.emit("searchTabPressed") }}
         >
           <NativeTabs.Trigger.Label>

@@ -10,7 +10,8 @@
  * A 🔴 here means a duration regression past both floors, or a render count
  * that went up.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { OWN_SCENARIOS_NOTE } from "./reassure-baseline";
 
 /** A change under this many milliseconds is timer noise, whatever its percentage. */
 export const MIN_DURATION_DIFF_MS = 1;
@@ -91,7 +92,20 @@ const sha = (run?: { commitHash?: string }) =>
 const plural = (count: number, word: string) =>
   `${count} ${word}${count === 1 ? "" : "s"}`;
 
-export const buildReport = (output: ReassureOutput): string => {
+/**
+ * `ownScenariosNote` is what `reassure-baseline.ts` left in `OWN_SCENARIOS_NOTE`:
+ * the commit it measured with that commit's own scenarios, when the PR's could
+ * not run there.
+ */
+export const buildReport = (
+  output: ReassureOutput,
+  ownScenariosNote?: string,
+): string => {
+  // A note names its base, so one left in `.reassure/` by an earlier run never
+  // speaks for this baseline.
+  const baseRanOwnScenarios =
+    ownScenariosNote !== undefined &&
+    ownScenariosNote === output.metadata?.baseline?.commitHash;
   const real = output.significant.filter(isRealDurationChange);
   const regressions = real
     .filter((entry) => entry.durationDiff > 0)
@@ -120,6 +134,12 @@ export const buildReport = (output: ReassureOutput): string => {
     "",
     `${sha(output.metadata?.baseline)} → ${sha(output.metadata?.current)}`,
     "",
+    ...(baseRanOwnScenarios
+      ? [
+          "⚠️ This PR's scenarios do not all run on the base, so the base was measured with its own scenarios and test doubles: a change below can come from those as well as from the code.",
+          "",
+        ]
+      : []),
     ...section(
       "Duration regressions",
       DURATION_HEADER,
@@ -168,6 +188,11 @@ if (require.main === module) {
     process.argv.slice(2);
   writeFileSync(
     output,
-    buildReport(JSON.parse(readFileSync(input, "utf8")) as ReassureOutput),
+    buildReport(
+      JSON.parse(readFileSync(input, "utf8")) as ReassureOutput,
+      existsSync(OWN_SCENARIOS_NOTE)
+        ? readFileSync(OWN_SCENARIOS_NOTE, "utf8").trim()
+        : undefined,
+    ),
   );
 }

@@ -5,7 +5,9 @@ import type {
   DownloadActivityMetadata,
   DownloadCompleteEvent,
   DownloadErrorEvent,
+  DownloadPausedEvent,
   DownloadProgressEvent,
+  DownloadResumedEvent,
   DownloadStartedEvent,
 } from "./src/BackgroundDownloader.types";
 import BackgroundDownloaderModule from "./src/BackgroundDownloaderModule";
@@ -29,6 +31,8 @@ export interface BackgroundDownloader {
     headers?: Record<string, string>,
   ): Promise<number>;
   cancelDownload(taskId: number): void;
+  /** iOS only; no-op elsewhere. Starts a paused download again. */
+  resumeDownload(taskId: number): void;
   cancelQueuedDownload(url: string): void;
   cancelAllDownloads(): void;
   getActiveDownloads(): Promise<ActiveDownload[]>;
@@ -57,6 +61,16 @@ export interface BackgroundDownloader {
 
   addStartedListener(
     listener: (event: DownloadStartedEvent) => void,
+  ): EventSubscription;
+
+  /** iOS only; Android never emits it. */
+  addPausedListener(
+    listener: (event: DownloadPausedEvent) => void,
+  ): EventSubscription;
+
+  /** iOS only; Android never emits it. */
+  addResumedListener(
+    listener: (event: DownloadResumedEvent) => void,
   ): EventSubscription;
 }
 
@@ -103,6 +117,11 @@ const BackgroundDownloader: BackgroundDownloader = {
     BackgroundDownloaderModule.cancelDownload(taskId);
   },
 
+  resumeDownload(taskId: number): void {
+    if (Platform.OS !== "ios") return;
+    BackgroundDownloaderModule.resumeDownload?.(taskId);
+  },
+
   cancelQueuedDownload(url: string): void {
     BackgroundDownloaderModule.cancelQueuedDownload(url);
   },
@@ -147,6 +166,21 @@ const BackgroundDownloader: BackgroundDownloader = {
       listener,
     );
   },
+
+  addPausedListener(
+    listener: (event: DownloadPausedEvent) => void,
+  ): EventSubscription {
+    return BackgroundDownloaderModule.addListener("onDownloadPaused", listener);
+  },
+
+  addResumedListener(
+    listener: (event: DownloadResumedEvent) => void,
+  ): EventSubscription {
+    return BackgroundDownloaderModule.addListener(
+      "onDownloadResumed",
+      listener,
+    );
+  },
 };
 
 export default BackgroundDownloader;
@@ -156,6 +190,8 @@ export type {
   DownloadActivityMetadata,
   DownloadCompleteEvent,
   DownloadErrorEvent,
+  DownloadPausedEvent,
   DownloadProgressEvent,
+  DownloadResumedEvent,
   DownloadStartedEvent,
 };

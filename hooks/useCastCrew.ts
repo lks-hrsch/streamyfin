@@ -40,11 +40,14 @@ const creditText = (
 /**
  * Collapses the credits of an item to one entry per person, in the order they
  * first appear. `Role` of the result lists everything the person is credited
- * for, each once, or is null when no credit says anything.
+ * for, each once, or is null when no credit says anything. Without a
+ * `kindLabel`, a credit without a role adds nothing to it.
  *
- * Returns new objects: the input is the query's cached data.
+ * Returns new objects: the input is the query's cached data. Exported for
+ * `useSeriesCast`, which merges the series' credits before adding its
+ * episodes' actors; components take `useCastCrew`.
  */
-const mergePeopleById = (
+export const mergePeopleById = (
   people: BaseItemPerson[] | null | undefined,
   kindLabel: ((kind: string) => string) | undefined,
 ): CastCrewPerson[] => {

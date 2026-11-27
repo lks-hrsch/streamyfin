@@ -42,25 +42,33 @@ const activeJobs = [
 
 let activeStore: ReturnType<typeof createStore>;
 
-const createWrapper = (initialJobs: JobStatus[]) => {
-  return function TestWrapper({ children }: { children: ReactNode }) {
-    const [store] = useState(() => {
-      const s = createStore();
-      s.set(processesAtom, initialJobs);
-      activeStore = s;
-      return s;
-    });
-    const queryClient = usePerfQueryClient();
+const TestWrapper = ({
+  initialJobs,
+  children,
+}: {
+  initialJobs: JobStatus[];
+  children: ReactNode;
+}) => {
+  const [store] = useState(() => {
+    const s = createStore();
+    s.set(processesAtom, initialJobs);
+    activeStore = s;
+    return s;
+  });
+  const queryClient = usePerfQueryClient();
 
-    return (
-      <JotaiProvider store={store}>
-        <QueryClientProvider client={queryClient}>
-          {children}
-        </QueryClientProvider>
-      </JotaiProvider>
-    );
-  };
+  return (
+    <JotaiProvider store={store}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </JotaiProvider>
+  );
 };
+
+const createWrapper =
+  (initialJobs: JobStatus[]) =>
+  ({ children }: { children: ReactNode }) => (
+    <TestWrapper initialJobs={initialJobs}>{children}</TestWrapper>
+  );
 
 describe("DownloadProvider Performance", () => {
   test("download progress updates re-render the active downloads list", async () => {

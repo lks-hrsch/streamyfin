@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Alert, Platform } from "react-native";
 import useRouter from "@/hooks/useAppRouter";
@@ -80,28 +80,21 @@ export const useWebSocket = ({
   playTrailers,
 }: UseWebSocketProps) => {
   const router = useRouter();
-  const { lastMessage } = useWebSocketContext();
+  const { subscribe } = useWebSocketContext();
   const { t } = useTranslation();
-  const { clearLastMessage } = useWebSocketContext();
 
-  useEffect(() => {
-    if (!lastMessage) return;
+  // An Effect Event: it runs a command with what the player rendered last
+  // (whether it is playing, its callbacks), without subscribing again on
+  // every play/pause.
+  const runCommand = useEffectEvent((data: any) => {
     if (offline) return;
 
-    // SyncPlay commands are scheduled by its coordinator. Handling them as
-    // ordinary remote commands would echo pause/seek back into the group.
-    if (
-      lastMessage.MessageType !== "GeneralCommand" &&
-      lastMessage.MessageType !== "Playstate"
-    ) {
-      return;
-    }
-    const command: string | undefined =
-      lastMessage?.Data?.Command || lastMessage?.Data?.Name;
+    // Playstate carries its command flat, GeneralCommand under Name with
+    // its Arguments.
+    const command: string | undefined = data?.Command || data?.Name;
 
-    const args = lastMessage?.Data?.Arguments as
-      | Record<string, string>
-      | undefined; // Arguments are Dictionary<string, string>
+    // Arguments are Dictionary<string, string>
+    const args = data?.Arguments as Record<string, string> | undefined;
 
     if (command === "PlayPause") {
       console.log("Command ~ PlayPause");
@@ -133,8 +126,7 @@ export const useWebSocket = ({
       console.log("Command ~ FastForward");
       fastForwardPlayback?.();
     } else if (command === "Seek") {
-      const positionStr =
-        args?.SeekPositionTicks ?? lastMessage.Data?.SeekPositionTicks;
+      const positionStr = args?.SeekPositionTicks ?? data?.SeekPositionTicks;
       console.log("Command ~ Seek", { positionStr });
       if (positionStr) {
         const position = Number.parseInt(positionStr, 10);
@@ -285,45 +277,23 @@ export const useWebSocket = ({
       const body = args?.Text;
       Alert.alert(t("player.message_from_server", { message: title }), body);
     }
-    clearLastMessage();
-  }, [
-    lastMessage,
-    offline,
-    isPlaying,
-    togglePlay,
-    stopPlayback,
-    router,
-    nextTrack,
-    previousTrack,
-    rewindPlayback,
-    fastForwardPlayback,
-    seekPlayback,
-    volumeUp,
-    volumeDown,
-    toggleMute,
-    toggleOsd,
-    toggleFullscreen,
-    goHome,
-    goToSettings,
-    setAudioStreamIndex,
-    setSubtitleStreamIndex,
-    moveUp,
-    moveDown,
-    moveLeft,
-    moveRight,
-    select,
-    pageUp,
-    pageDown,
-    setVolume,
-    setRepeatMode,
-    setShuffleMode,
-    togglePictureInPicture,
-    takeScreenshot,
-    sendString,
-    sendKey,
-    playMediaSource,
-    playTrailers,
-    t,
-    clearLastMessage,
-  ]);
+  });
+
+  // Subscribed rather than read off a context state slot: the slot kept only
+  // the newest message, so commands arriving in the same tick were lost, and
+  // the player ran whatever command was left in it when it mounted. SyncPlay
+  // commands come as a message type of their own, scheduled by its
+  // coordinator: handling them here would echo pause/seek back into the group.
+  useEffect(() => {
+    const unsubscribeGeneral = subscribe("GeneralCommand", (data) =>
+      runCommand(data),
+    );
+    const unsubscribePlaystate = subscribe("Playstate", (data) =>
+      runCommand(data),
+    );
+    return () => {
+      unsubscribeGeneral();
+      unsubscribePlaystate();
+    };
+  }, [subscribe]);
 };

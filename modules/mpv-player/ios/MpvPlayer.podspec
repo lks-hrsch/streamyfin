@@ -13,7 +13,9 @@ Pod::Spec.new do |s|
   # Google Cast SDK for the module's Cast support (ios/Cast), phones and tablets only: tvOS
   # compiles a stub. The variant without Bluetooth stopped at 4.8.0 (2023, no arm64
   # simulator), so this is the same pod the app linked through the library.
-  s.ios.dependency 'google-cast-sdk', '~> 4.8'
+  # The Mac Catalyst build (its Podfile sets STREAMYFIN_MAC_CATALYST) leaves it out: the SDK
+  # ships no Catalyst slice, and ios/Cast compiles the same stub there as on tvOS.
+  s.ios.dependency 'google-cast-sdk', '~> 4.8' unless ENV['STREAMYFIN_MAC_CATALYST'] == '1'
 
   # Tier 1 builds only (e2e/README.md, "Fake Cast receivers"): `STREAMYFIN_FAKE_CAST_DEVICES=1 pod install`
   # compiles fake receivers in place of the Cast SDK's. No store build sets it.

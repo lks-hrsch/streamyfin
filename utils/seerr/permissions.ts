@@ -95,3 +95,15 @@ export const canSeeRecentlyAdded = (permissions: number): boolean =>
     permissions,
     { type: "or" },
   );
+
+/**
+ * Whether Seerr takes an issue from this user: the rule its POST /issue route
+ * checks, either permission will do.
+ */
+export const canCreateIssues = (permissions: number | undefined): boolean =>
+  permissions !== undefined &&
+  hasPermission(
+    [Permission.MANAGE_ISSUES, Permission.CREATE_ISSUES],
+    permissions,
+    { type: "or" },
+  );

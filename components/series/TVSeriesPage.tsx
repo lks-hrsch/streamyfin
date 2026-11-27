@@ -25,9 +25,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ItemImage } from "@/components/common/ItemImage";
 import { Text } from "@/components/common/Text";
 import { getItemNavigation } from "@/components/common/TouchableItemRouter";
+import {
+  TVSeerrMissingSeasons,
+  TVSeerrRequestSeasonsButton,
+} from "@/components/seerr/tv/TVSeerrMissingSeasons";
 import { episodeRowState } from "@/components/series/episodeRowState";
 import { seasonIndexAtom } from "@/components/series/SeasonPicker";
 import { TVEpisodeList } from "@/components/series/TVEpisodeList";
+import { TVSeriesCast } from "@/components/series/TVSeriesCast";
 import { TVSeriesHeader } from "@/components/series/TVSeriesHeader";
 import { TVSimilarItems } from "@/components/TVSimilarItems";
 import { TVButton } from "@/components/tv/TVButton";
@@ -42,6 +47,7 @@ import useRouter from "@/hooks/useAppRouter";
 import { useShuffleQueue } from "@/hooks/useShuffleQueue";
 import { useTVItemActionModal } from "@/hooks/useTVItemActionModal";
 import { useTVOptionModal } from "@/hooks/useTVOptionModal";
+import { useTVSeerrMissingSeasons } from "@/hooks/useTVSeerrMissingSeasons";
 import { useTVSeriesSeasonModal } from "@/hooks/useTVSeriesSeasonModal";
 import { useTVThemeMusic } from "@/hooks/useTVThemeMusic";
 import { useDownload } from "@/providers/DownloadProvider";
@@ -73,8 +79,12 @@ interface TVSeriesPageProps {
 
 export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   item,
+  // The episodes as given too, undefined while they load or when they could
+  // not: Seerr's list waits for them rather than taking none for an empty
+  // library.
+  allEpisodes: knownEpisodes,
   allEpisodes = [],
-  isLoading: _isLoading,
+  isLoading,
   initialSeasonIndex,
 }) => {
   const typography = useScaledTVTypography();
@@ -105,6 +115,14 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
   const [playButtonRef, setPlayButtonRef] = useState<ViewInstance | null>(null);
   const [firstEpisodeRef, setFirstEpisodeRef] = useState<ViewInstance | null>(
     null,
+  );
+
+  // Nothing to ask Seerr offline. Play takes the focus back from the request
+  // sheet when the request left nothing to ask for, and its button with it.
+  const seerr = useTVSeerrMissingSeasons(
+    isOffline ? undefined : item,
+    knownEpisodes,
+    playButtonRef,
   );
 
   // ScrollView ref for page scrolling
@@ -452,10 +470,12 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
           <View style={{ flex: 1, justifyContent: "center" }}>
             <TVSeriesHeader item={item} />
 
-            {/* Action buttons */}
+            {/* Action buttons. Wrapped: with Seerr's request beside them, the
+                row can outgrow the column the poster leaves. */}
             <View
               style={{
                 flexDirection: "row",
+                flexWrap: "wrap",
                 gap: scaleSize(16),
                 marginTop: scaleSize(32),
               }}
@@ -533,7 +553,20 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
               )}
 
               <TVFavoriteButton item={item} disabled={isSeasonModalVisible} />
+
+              {seerr.offersRequest && (
+                <TVSeerrRequestSeasonsButton
+                  onPress={seerr.requestSeasons}
+                  disabled={isSeasonModalVisible}
+                  refSetter={seerr.setButtonRef}
+                />
+              )}
             </View>
+
+            <TVSeerrMissingSeasons
+              seasons={seerr.seasons}
+              offersRequest={seerr.offersRequest}
+            />
           </View>
 
           {/* Right side - Poster */}
@@ -613,6 +646,19 @@ export const TVSeriesPage: React.FC<TVSeriesPageProps> = ({
             horizontalPadding={HORIZONTAL_PADDING}
           />
         </View>
+
+        {/* The cast, as movies and episodes have it. Mounted once the
+            series' episodes are in, so its request goes out after the
+            page's own. Offline it draws nothing. */}
+        {!isLoading && (
+          <TVSeriesCast
+            item={item}
+            onPersonPress={handlePersonPress}
+            disabled={isSeasonModalVisible}
+            horizontalPadding={HORIZONTAL_PADDING}
+            titleInset={SCALE_PADDING}
+          />
+        )}
 
         {/* Credits lines - creators, directors, writers */}
         <TVCastCrewText

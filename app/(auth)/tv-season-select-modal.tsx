@@ -15,7 +15,7 @@ import {
 import { Text } from "@/components/common/Text";
 import { TVButton } from "@/components/tv";
 import { useTVFocusAnimation } from "@/components/tv/hooks/useTVFocusAnimation";
-import { SeerrStatusColors } from "@/constants/Colors";
+import { SeerrSeasonStatusColors, SeerrStatusColors } from "@/constants/Colors";
 import { SEERR_BLOCKED_OPACITY } from "@/constants/Seerr";
 import { useScaledTVTypography } from "@/constants/TVTypography";
 import useRouter from "@/hooks/useAppRouter";
@@ -26,20 +26,12 @@ import { useTVRequestModal } from "@/hooks/useTVRequestModal";
 import { tvSeasonSelectModalAtom } from "@/utils/atoms/tvSeasonSelectModal";
 import { seasonQuotaText } from "@/utils/seerr/quota";
 import { type SeasonRow, seasonRowStatus } from "@/utils/seerr/seasons";
+import { seerrSeasonLabel } from "@/utils/seerr/seasonText";
 import { seerrStatusBadge } from "@/utils/seerr/statusBadge";
 import type { MediaRequestBody } from "@/utils/seerr/types";
-import { MediaStatus, MediaType } from "@/utils/seerr/types";
+import { MediaType } from "@/utils/seerr/types";
 import { store } from "@/utils/store";
 import { createSubmission } from "@/utils/submission";
-
-// A season already asked for or in the library shows where it stands, in the
-// colours of the phone's season list (SeasonPicker).
-const STATUS_COLORS: Partial<Record<MediaStatus, string>> = {
-  [MediaStatus.PENDING]: SeerrStatusColors.pending,
-  [MediaStatus.PROCESSING]: SeerrStatusColors.requested,
-  [MediaStatus.PARTIALLY_AVAILABLE]: SeerrStatusColors.available,
-  [MediaStatus.AVAILABLE]: SeerrStatusColors.available,
-};
 
 /** A season's card: chosen or not, or where it stands when it is settled. */
 const TVSeasonToggleCard: React.FC<{
@@ -98,7 +90,10 @@ const TVSeasonToggleCard: React.FC<{
             <View
               style={[
                 styles.statusBadge,
-                { backgroundColor: STATUS_COLORS[status] ?? "#6b7280" },
+                // Where it stands, in the colours of the phone's season list.
+                {
+                  backgroundColor: SeerrSeasonStatusColors[status] ?? "#6b7280",
+                },
               ]}
             >
               <MaterialCommunityIcons
@@ -116,9 +111,7 @@ const TVSeasonToggleCard: React.FC<{
           ]}
           numberOfLines={1}
         >
-          {row.seasonNumber === 0
-            ? t("seerr.specials")
-            : t("seerr.season_number", { season_number: row.seasonNumber })}
+          {seerrSeasonLabel(t, row.seasonNumber)}
         </Text>
         <Text
           style={[
@@ -172,6 +165,7 @@ export default function TVSeasonSelectModalPage() {
     details: modalState?.series,
     enabled: !!modalState,
     quotaUserId: seerrUser?.id,
+    held: modalState?.heldSeasons,
   });
 
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -241,7 +235,7 @@ export default function TVSeasonSelectModalPage() {
     }
 
     await requestMedia(modalState.title, body, () => {
-      modalState.onRequested();
+      modalState.onRequested?.();
       if (submission.dismiss()) router.back();
     });
     // A refusal leaves the sheet open, to try again.

@@ -9,7 +9,7 @@ interface ShowRequestModalParams {
   title: string;
   id: number;
   mediaType: MediaType;
-  onRequested: () => void;
+  onRequested?: () => void;
 }
 
 export const useTVRequestModal = () => {

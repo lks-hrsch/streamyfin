@@ -1,6 +1,15 @@
-import { nextResultsPage, searchSeerr, seerrQueryString } from "./search";
+import { QueryClient, type QueryClientConfig } from "@tanstack/react-query";
+import { isSeerrQuery, touchedByRequest } from "./queries";
+import {
+  nextResultsPage,
+  type SeerrSearchApi,
+  searchSeerr,
+  seerrFirstPageKey,
+  seerrFirstPageQuery,
+  seerrQueryString,
+} from "./search";
 
-const fakeApi = (pages: { id: number }[][] = [[]]) => {
+const fakeApi = (pages: { id: number; mediaType?: string }[][] = [[]]) => {
   const calls: { query: string; page: number }[] = [];
   const api = {
     search: async (params: { query: string; page: number }) => {
@@ -50,8 +59,126 @@ describe("searchSeerr", () => {
     expect(results.map((result) => result.id)).toEqual([1, 2, 3]);
   });
 
+  test("keeps a film and a series that share a TMDB number", async () => {
+    const { api } = fakeApi([
+      [
+        { id: 1399, mediaType: "movie" },
+        { id: 1399, mediaType: "tv" },
+      ],
+      [{ id: 1399, mediaType: "tv" }],
+    ]);
+
+    const results = await searchSeerr(api, "got");
+
+    expect(results.map((result) => `${result.mediaType}:${result.id}`)).toEqual(
+      ["movie:1399", "tv:1399"],
+    );
+  });
+
   test("finds nothing without a Seerr connection", async () => {
     expect(await searchSeerr(undefined, "dune")).toEqual([]);
+  });
+});
+
+// The fake server's answer to a page: a film numbered as the page, so a test
+// tells the pages apart, and one per server with `id`.
+const fakeServer = (
+  server = "https://seerr.example.com",
+  totalPages = 1,
+  id?: number,
+) => {
+  const calls: { query: string; page: number }[] = [];
+  const api = {
+    axios: { defaults: { baseURL: server } },
+    search: async (params: { query: string; page: number }) => {
+      calls.push(params);
+      return {
+        page: params.page,
+        totalPages,
+        totalResults: totalPages * 20,
+        results: [{ id: id ?? params.page, mediaType: "movie" }],
+      };
+    },
+  };
+  return { api: api as never as SeerrSearchApi, calls };
+};
+
+const clients: QueryClient[] = [];
+
+type QueryDefaults = NonNullable<
+  QueryClientConfig["defaultOptions"]
+>["queries"];
+
+const newClient = (queries: QueryDefaults = { retry: false }) => {
+  const client = new QueryClient({ defaultOptions: { queries } });
+  clients.push(client);
+  return client;
+};
+
+// Each cached query holds a collection timer, which kept Jest from exiting
+// for the five minutes it runs.
+afterEach(() => {
+  for (const client of clients.splice(0)) client.clear();
+});
+
+describe("seerrFirstPageQuery", () => {
+  // It runs for every text typed, so it asks for the first page only.
+  test("asks Seerr for the first page alone", async () => {
+    const { api, calls } = fakeServer(undefined, 5);
+
+    await newClient().fetchQuery(seerrFirstPageQuery(api, "dune"));
+
+    expect(calls).toEqual([{ query: "dune", page: 1 }]);
+  });
+
+  // The plugin can point the app at another Seerr without a sign-out, which
+  // leaves the cache as it was.
+  test("answers for a server with that server's results", async () => {
+    const client = newClient();
+    const first = fakeServer("https://seerr-a.example.com", 1, 1);
+    const second = fakeServer("https://seerr-b.example.com", 1, 2);
+
+    await client.fetchQuery(seerrFirstPageQuery(first.api, "dune"));
+    const page = await client.fetchQuery(
+      seerrFirstPageQuery(second.api, "dune"),
+    );
+
+    expect(second.calls).toHaveLength(1);
+    expect(page.results.map((result) => result.id)).toEqual([2]);
+  });
+
+  test("a first page is only good for its own text", async () => {
+    const client = newClient();
+    const { api, calls } = fakeServer();
+
+    await client.fetchQuery(seerrFirstPageQuery(api, "dune"));
+    await client.fetchQuery(seerrFirstPageQuery(api, "dun"));
+
+    expect(calls.map((call) => call.query)).toEqual(["dune", "dun"]);
+  });
+
+  // With the server in the key, a request must still mark the page out of
+  // date, and a reset of Seerr must still take it out of the cache.
+  test("is still found by a request and by a reset of Seerr", () => {
+    const key = seerrFirstPageKey(fakeServer().api, "dune");
+
+    expect(touchedByRequest()(key)).toBe(true);
+    expect(isSeerrQuery(key)).toBe(true);
+  });
+
+  // A request changes a title's status: the page is asked again rather than
+  // reused for the rest of the minute.
+  test("asks again for a first page that was invalidated", async () => {
+    const client = newClient();
+    const { api, calls } = fakeServer();
+
+    await client.fetchQuery(seerrFirstPageQuery(api, "dune"));
+    await client.invalidateQueries({
+      predicate: (query) => touchedByRequest()(query.queryKey),
+    });
+    await client.fetchQuery(seerrFirstPageQuery(api, "dune"));
+
+    expect(calls.map((call) => call.page)).toEqual([1, 1]);
   });
 });
 

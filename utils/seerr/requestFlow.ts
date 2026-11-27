@@ -15,8 +15,20 @@ const refusalMessage = (error: unknown): string | undefined => {
   return typeof data?.message === "string" ? data.message : undefined;
 };
 
-const outcomeOf = (request: MediaRequest): RequestOutcome => {
-  switch (request.status) {
+/**
+ * Seerr's answer to a request that filed nothing: 202 with a message ("No
+ * seasons available to request") when every season asked for holds a request
+ * already, which a view out of date can still offer. The spec documents 201.
+ */
+export interface NothingRequested {
+  message?: string;
+}
+
+const outcomeOf = (answer: MediaRequest | NothingRequested): RequestOutcome => {
+  if (!("status" in answer)) {
+    return { kind: "refused", message: answer.message };
+  }
+  switch (answer.status) {
     case MediaRequestStatus.DECLINED:
       return { kind: "declined" };
     case MediaRequestStatus.FAILED:
@@ -47,7 +59,7 @@ export const sendSeerrRequest = async ({
 }: {
   /** What tells this request from another, such as its body. */
   key: string;
-  send: () => Promise<MediaRequest>;
+  send: () => Promise<MediaRequest | NothingRequested>;
   refresh: () => Promise<unknown>;
   onOutcome: (outcome: RequestOutcome) => void;
 }): Promise<void> => {
@@ -66,16 +78,24 @@ export const sendSeerrRequest = async ({
 };
 
 /**
- * Whether a Seerr answer means the session is gone. Seerr answers 403 both
- * to a request without a session and to an action the user may not take,
- * such as a request past the quota: only a read refused tells the first, and
- * not the detail of another user's request.
+ * Whether a Seerr answer means the session is gone. A request that carries no
+ * session cookie at all is answered 401 ("cookie 'connect.sid' required"),
+ * except a sign-in (`signingIn`), where 401 is a wrong password or a Quick
+ * Connect not approved yet. Seerr answers 403 both to a session it no longer
+ * knows and to an action the user may not take, such as a request past the
+ * quota: only a read refused tells the first, and not the detail of another
+ * user's request.
  */
 export const endsSeerrSession = (
   status: number | undefined,
   method: string | undefined,
   path: string | undefined,
-): boolean =>
-  status === 403 &&
-  (method ?? "get").toLowerCase() === "get" &&
-  !/\/request\/\d+$/.test(path ?? "");
+  signingIn: boolean,
+): boolean => {
+  if (status === 401) return !signingIn;
+  return (
+    status === 403 &&
+    (method ?? "get").toLowerCase() === "get" &&
+    !/\/request\/\d+$/.test(path ?? "")
+  );
+};

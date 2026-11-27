@@ -110,8 +110,11 @@
   "submit": {
     "production": {
       "ios": {
-        "appleTeamId": "MWD5K362T8",
-        "ascAppId": "6593660679"
+        "appleTeamId": "BWMWYHN53X",
+        "ascAppId": "6823240417",
+        "ascApiKeyPath": "$EXPO_ASC_API_KEY_PATH",
+        "ascApiKeyId": "$EXPO_ASC_KEY_ID",
+        "ascApiKeyIssuerId": "$EXPO_ASC_ISSUER_ID"
       },
       "android": {
         "serviceAccountKeyPath": "./google-service-account.json",
@@ -121,8 +124,11 @@
     },
     "production_tv": {
       "ios": {
-        "appleTeamId": "MWD5K362T8",
-        "ascAppId": "6593660679"
+        "appleTeamId": "BWMWYHN53X",
+        "ascAppId": "6823240417",
+        "ascApiKeyPath": "$EXPO_ASC_API_KEY_PATH",
+        "ascApiKeyId": "$EXPO_ASC_KEY_ID",
+        "ascApiKeyIssuerId": "$EXPO_ASC_ISSUER_ID"
       }
     }
   }
