@@ -45,6 +45,9 @@ import { getSeriesPlaybackTarget } from "@/utils/seriesPlaybackTarget";
 // Height of the backdrop header, in layout points.
 const HEADER_HEIGHT = 400;
 
+// Cast is off on TV.
+const Chromecast = Platform.isTV ? null : require("@/components/Chromecast");
+
 const page: React.FC = () => {
   const navigation = useNavigation();
   const { t } = useTranslation();
@@ -174,6 +177,7 @@ const page: React.FC = () => {
       headerRight: () =>
         !isLoading && item && allEpisodes && allEpisodes.length > 0 ? (
           <HeaderButtonGroup>
+            {Chromecast && <Chromecast.Chromecast />}
             {shuffleButton}
             {!Platform.isTV && !isOffline && (
               <SyncPlayButton items={allEpisodes} title={item.Name} />

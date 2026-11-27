@@ -1,0 +1,45 @@
+# Override both names for a second worktree so setup never adopts another checkout's container.
+name: ${SYNCPLAY_PROJECT:-streamyfin-syncplay-e2e}
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:10.11.11@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db
+    container_name: ${SYNCPLAY_CONTAINER:-streamyfin-syncplay-e2e-jellyfin}
+    ports:
+      - "${SYNCPLAY_BIND:-127.0.0.1}:${SYNCPLAY_PORT:-18096}:8096"
+    volumes:
+      - ./.state/config:/config
+      - ./.state/cache:/cache
+      - ./.state/media:/media:ro
+      - ./.state/catalog/movies:/catalog/movies:ro
+      - ./.state/catalog/shows:/catalog/shows:ro
+      - ./.state/catalog/music:/catalog/music:ro
+    environment:
+      JELLYFIN_PublishedServerUrl: "http://${SYNCPLAY_HOST:-127.0.0.1}:${SYNCPLAY_PORT:-18096}"
+    restart: "no"
+  seerr:
+    image: ghcr.io/seerr-team/seerr:v3.5.0
+    container_name: ${SYNCPLAY_SEERR_CONTAINER:-streamyfin-syncplay-e2e-seerr}
+    ports:
+      - "${SYNCPLAY_BIND:-127.0.0.1}:${SYNCPLAY_SEERR_PORT:-15055}:5055"
+    volumes:
+      - ./.state/seerr:/app/config
+    environment:
+      TZ: UTC
+    restart: "no"
+    depends_on:
+      - jellyfin
+  radarr:
+    # Keep in lockstep with RADARR_VERSION in native.py.
+    image: lscr.io/linuxserver/radarr:7.0.3.10918-ls328@sha256:044788f5508b7f67a3e0368cdd142c77c4d4cd5aec2efaba53e1a68b6b6231e7
+    container_name: ${SYNCPLAY_RADARR_CONTAINER:-streamyfin-syncplay-e2e-radarr}
+    ports:
+      - "${SYNCPLAY_BIND:-127.0.0.1}:${SYNCPLAY_RADARR_PORT:-17878}:7878"
+    volumes:
+      - ./.state/radarr:/config
+      - ./.state/radarr-media:/radarr-media
+    environment:
+      TZ: UTC
+      # The image re-owns /config to these; backend.py passes the setup user's ids.
+      PUID: ${SYNCPLAY_UID:-1000}
+      PGID: ${SYNCPLAY_GID:-1000}
+    restart: "no"

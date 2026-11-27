@@ -10,6 +10,7 @@ jest.mock("@sentry/react-native", () => ({
   },
   close: () => Promise.resolve(),
   breadcrumbsIntegration: () => ({ name: "Breadcrumbs" }),
+  wrap: jest.fn((component: unknown) => component),
 }));
 jest.mock("@/utils/storedSettings", () => ({
   readStoredSettings: () => ({}),
@@ -47,6 +48,7 @@ jest.mock("expo-device", () => ({
 }));
 stubReactNative();
 
+import * as Sentry from "@sentry/react-native";
 import { AxiosError } from "axios";
 import { OFFICIAL_APPLICATION_IDS } from "@/constants/Sentry";
 import { describeHttpResponse, markExpectedError } from "./errors";
@@ -58,6 +60,7 @@ import {
   isUserInteractionBreadcrumb,
   reportsFromBuild,
   scrubDeep,
+  wrapRootIfSentryEnabled,
 } from "./sentry";
 
 describe("isUserInteractionBreadcrumb — no behaviour tracking, no titles", () => {
@@ -336,6 +339,50 @@ describe("dev builds do not report", () => {
     const options = initCalls[0] as Record<string, unknown>;
     expect(options.enableReportNonFullyBlockingAppHangs).toBe(false);
     expect(options).not.toHaveProperty("enableReportNonFullyBlockedAppHangs");
+  });
+});
+
+describe("wrapRootIfSentryEnabled — the root gets a profiler only with a client", () => {
+  const setDev = (value: boolean) => {
+    (globalThis as { __DEV__?: boolean }).__DEV__ = value;
+  };
+  const Root = () => null;
+
+  // Sentry's root profiler warns when it mounts without a client, and a dev
+  // build never initializes one: the root passes through untouched there.
+  test("an ordinary dev build returns the root unwrapped", () => {
+    setDev(true);
+    expect(wrapRootIfSentryEnabled(Root)).toBe(Root);
+    expect(jest.mocked(Sentry.wrap)).not.toHaveBeenCalled();
+  });
+
+  test("a release build wraps the root in the profiler", () => {
+    setDev(false);
+    wrapRootIfSentryEnabled(Root);
+    expect(jest.mocked(Sentry.wrap)).toHaveBeenCalledWith(Root);
+  });
+
+  // sentryDebugInDev reads EXPO_PUBLIC_SENTRY_DEBUG at module load, so the
+  // module under test loads again with it set, inside its own registry.
+  test("the debug override still wraps the root in a dev build", () => {
+    setDev(true);
+    const previous = process.env.EXPO_PUBLIC_SENTRY_DEBUG;
+    process.env.EXPO_PUBLIC_SENTRY_DEBUG = "1";
+    try {
+      jest.isolateModules(() => {
+        const sentry =
+          require("@sentry/react-native") as typeof import("@sentry/react-native");
+        const wrapped = (
+          require("./sentry") as typeof import("./sentry")
+        ).wrapRootIfSentryEnabled(Root);
+        expect(sentry.wrap).toHaveBeenCalledWith(Root);
+        expect(wrapped).toBe(Root);
+      });
+    } finally {
+      // Assigning undefined would store the string "undefined".
+      if (previous === undefined) delete process.env.EXPO_PUBLIC_SENTRY_DEBUG;
+      else process.env.EXPO_PUBLIC_SENTRY_DEBUG = previous;
+    }
   });
 });
 
@@ -657,102 +704,6 @@ describe("classifyOutgoingEvent — axios errors on the unhandledrejection path"
       "/Sessions/Capabilities/Full",
       "403",
     ]);
-  });
-});
-
-// REACT-NATIVE-3S: 10 users, a few seconds after launch on Android. The cast
-// library's hooks ask a session that is still being resumed for its device
-// and media status, with no catch.
-describe("classifyOutgoingEvent — the cast library's own unhandled rejection", () => {
-  type OutgoingEvent = Parameters<typeof classifyOutgoingEvent>[0];
-
-  // The shape React Native gives a rejected native promise.
-  const nativeRejection = (message: string, className: string) =>
-    Object.assign(new Error(message), {
-      code: "EUNSPECIFIED",
-      nativeStackAndroid: [
-        { class: className, file: "With.java", methodName: "run" },
-        { class: "android.os.Handler", file: "Handler.java" },
-      ],
-    });
-
-  const eventOf = (
-    mechanism: string,
-    value: string,
-    module?: string,
-  ): OutgoingEvent =>
-    ({
-      exception: {
-        values: [
-          ...(module
-            ? [
-                {
-                  type: "java.lang.IllegalStateException",
-                  value,
-                  stacktrace: { frames: [{ module, function: "run" }] },
-                },
-              ]
-            : []),
-          { type: "Error", value, mechanism: { type: mechanism } },
-        ],
-      },
-    }) as never;
-
-  const CAST_CLASS = "com.reactnative.googlecast.api.With$3";
-
-  test("is dropped", () => {
-    expect(
-      classifyOutgoingEvent(eventOf("onunhandledrejection", "No session"), {
-        originalException: nativeRejection("No session", CAST_CLASS),
-      }),
-    ).toBeNull();
-  });
-
-  test("is dropped when only the event carries the native frames", () => {
-    expect(
-      classifyOutgoingEvent(
-        eventOf("onunhandledrejection", "No session", CAST_CLASS),
-        { originalException: new Error("No session") },
-      ),
-    ).toBeNull();
-  });
-
-  // loadMedia or stop failing in the app's own code is a failed user action,
-  // caught and reported at the call site.
-  test("the same error caught by a call site of the app is kept", () => {
-    const event = eventOf("generic", "No session");
-    expect(
-      classifyOutgoingEvent(event, {
-        originalException: nativeRejection("No session", CAST_CLASS),
-      }),
-    ).toBe(event);
-  });
-
-  test("another unhandled rejection out of the cast library is kept", () => {
-    const event = eventOf("onunhandledrejection", "Invalid request");
-    expect(
-      classifyOutgoingEvent(event, {
-        originalException: nativeRejection("Invalid request", CAST_CLASS),
-      }),
-    ).toBe(event);
-  });
-
-  test("a 'No session' from anywhere else is kept", () => {
-    const event = eventOf("onunhandledrejection", "No session");
-    expect(
-      classifyOutgoingEvent(event, {
-        originalException: nativeRejection(
-          "No session",
-          "com.example.other.Player",
-        ),
-      }),
-    ).toBe(event);
-    const plain = eventOf("onunhandledrejection", "No session");
-    expect(
-      classifyOutgoingEvent(plain, {
-        originalException: new Error("No session"),
-      }),
-    ).toBe(plain);
   });
 });
 

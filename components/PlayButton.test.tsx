@@ -1,0 +1,346 @@
+import type {
+  BaseItemDto,
+  MediaSourceInfo,
+} from "@jellyfin/sdk/lib/generated-client";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react-native";
+import {
+  CHROMECAST_STICK_AUTO_MAX_BITRATE,
+  CHROMECAST_STICK_MODEL,
+} from "@/constants/Cast";
+import type { Bitrate } from "./BitrateSelector";
+import { PlayButton } from "./PlayButton";
+
+const mockCast = jest.fn(async (..._args: unknown[]) => ({ status: "loaded" }));
+const mockPlayMedia = jest.fn(async (..._args: unknown[]) => {});
+const mockDetectBitrate = jest.fn(
+  async (_api: unknown, _force?: unknown, _options?: unknown) => 12_000_000,
+);
+let mockClient: object | null = { getMediaStatus: async () => null };
+/** The entry picked in the Chromecast / Device / Cancel sheet. */
+let mockChoice = 0;
+/** The receiver the phone is connected to. */
+let mockDevice: { deviceId: string; friendlyName: string; modelName?: string } =
+  { deviceId: "device-1", friendlyName: "Living Room TV" };
+/** The settings the page reads on its next render. */
+let mockSettings: Record<string, unknown> = { showResumeDialog: false };
+// One value for every render, as the real hooks give between two renders
+// where nothing changed: a double rebuilt each time would rebuild every
+// callback that lists it, and hide a dependency missing from the list.
+const mockActionSheet = {
+  showActionSheetWithOptions: (
+    _options: unknown,
+    onSelect: (index?: number) => void,
+  ) => onSelect(mockChoice),
+};
+
+jest.mock("@expo/react-native-action-sheet", () => ({
+  useActionSheet: () => mockActionSheet,
+}));
+jest.mock("@expo/vector-icons", () => {
+  const { View } = jest.requireActual("react-native");
+  const Glyph = ({ name }: { name: string }) => (
+    <View testID={`glyph-${name}`} />
+  );
+  return { Feather: Glyph, Ionicons: Glyph };
+});
+jest.mock("@/modules/mpv-player/src/cast", () => {
+  const { View } = jest.requireActual("react-native");
+  return {
+    CastButton: () => <View testID='native-cast-button' />,
+    PlayServicesState: { SUCCESS: "success" },
+    playServicesState: () => "success",
+    showExpandedControls: jest.fn(),
+    showPlayServicesErrorDialog: jest.fn(),
+    useCastClient: () => mockClient,
+    useCastDevice: () => (mockClient ? mockDevice : null),
+    useCastMediaStatus: () => null,
+  };
+});
+jest.mock("react-native-reanimated", () => ({
+  ...jest.requireActual("@/test-utils/reanimated").reanimatedModule,
+}));
+jest.mock("@/hooks/useHaptic", () => ({ useHaptic: () => () => {} }));
+jest.mock("@/hooks/usePlayMedia", () => ({
+  usePlayMedia: () => mockPlayMedia,
+}));
+jest.mock("@/providers/Downloads/database", () => ({
+  getDownloadedItemById: () => undefined,
+}));
+jest.mock("@/providers/GlobalModalProvider", () => ({
+  useGlobalModal: () => ({ showModal: () => {}, hideModal: () => {} }),
+}));
+jest.mock("@/providers/JellyfinProvider", () => {
+  const { atom } = jest.requireActual("jotai");
+  const { makeApi } = jest.requireActual("@/test-utils/jellyfinApi");
+  return { apiAtom: atom(makeApi()), userAtom: atom({ Id: "user-1" }) };
+});
+jest.mock("@/providers/OfflineModeProvider", () => ({
+  useOfflineMode: () => false,
+}));
+jest.mock("@/providers/SyncPlayProvider", () => ({
+  useSyncPlay: () => ({ enabled: false }),
+}));
+jest.mock("@/utils/atoms/primaryColor", () => ({
+  itemThemeColorAtom: jest
+    .requireActual("jotai")
+    .atom({ primary: "#FFFFFF", text: "#000000" }),
+}));
+jest.mock("@/utils/atoms/settings", () => ({
+  useSettings: () => ({ settings: mockSettings }),
+}));
+jest.mock("@/utils/cast/jellyfinReceiver", () => ({
+  castToJellyfinReceiver: (...args: unknown[]) => mockCast(...args),
+  currentReceiverName: async () => "Living Room TV",
+  receiverNameFor: () => "Living Room TV",
+}));
+jest.mock("@/utils/jellyfin/bitrateTest", () => ({
+  detectBitrate: (api: unknown, force?: unknown, options?: unknown) =>
+    mockDetectBitrate(api, force, options),
+}));
+
+const MOVIE: BaseItemDto = {
+  Id: "movie-1",
+  Name: "Movie",
+  Type: "Movie",
+  RunTimeTicks: 72_000_000_000,
+};
+const SOURCE: MediaSourceInfo = { Id: "source-1", MediaStreams: [] };
+const CHANNEL: BaseItemDto = {
+  Id: "channel-1",
+  Name: "Channel",
+  Type: "TvChannel",
+};
+
+const AUTO: Bitrate = { key: "Auto", value: undefined };
+const MAX: Bitrate = { key: "Max", value: undefined };
+const EIGHT_MBPS: Bitrate = { key: "8 Mb/s", value: 8_000_000 };
+
+const play = async (
+  bitrate: Bitrate,
+  choice: "Chromecast" | "Device",
+  item: BaseItemDto = MOVIE,
+) => {
+  mockChoice = choice === "Chromecast" ? 0 : 1;
+  await render(
+    <PlayButton
+      item={item}
+      selectedOptions={{
+        bitrate,
+        mediaSource: SOURCE,
+        audioIndex: 1,
+        subtitleIndex: -1,
+      }}
+    />,
+  );
+  await fireEvent.press(screen.getByLabelText("accessibility.play_button"));
+};
+
+/** The bitrate the receiver was handed, once the cast went out. */
+const castBitrate = async () => {
+  await waitFor(() => expect(mockCast).toHaveBeenCalled());
+  const [, session] = mockCast.mock.calls[0] as [
+    unknown,
+    Promise<{ maxBitrate?: number }> | { maxBitrate?: number },
+  ];
+  return (await session).maxBitrate;
+};
+
+beforeEach(() => {
+  mockCast.mockClear();
+  mockPlayMedia.mockClear();
+  mockDetectBitrate.mockClear();
+  mockClient = { getMediaStatus: async () => null };
+  mockDevice = { deviceId: "device-1", friendlyName: "Living Room TV" };
+  mockSettings = { showResumeDialog: false };
+});
+
+describe("casting from the item page", () => {
+  // The receiver negotiates the stream itself: handed nothing, it would pick
+  // a bitrate of its own instead of the one Auto stands for.
+  test("hands the receiver the bitrate Auto measures", async () => {
+    await play(AUTO, "Chromecast");
+
+    expect(await castBitrate()).toBe(12_000_000);
+    expect(mockDetectBitrate).toHaveBeenCalledTimes(1);
+  });
+
+  // The cast took its turn only once Auto had measured: one picked meanwhile,
+  // at a fixed quality, went out first and was then replaced by it.
+  test("goes out when picked, while Auto still measures", async () => {
+    let measured: (bitrate: number) => void = () => {};
+    mockDetectBitrate.mockImplementationOnce(
+      () => new Promise<number>((resolve) => (measured = resolve)),
+    );
+
+    await play(AUTO, "Chromecast");
+
+    await waitFor(() => expect(mockCast).toHaveBeenCalled());
+    measured(12_000_000);
+    expect(await castBitrate()).toBe(12_000_000);
+  });
+
+  test("hands the receiver a fixed quality as it is", async () => {
+    await play(EIGHT_MBPS, "Chromecast");
+
+    expect(await castBitrate()).toBe(8_000_000);
+    expect(mockDetectBitrate).not.toHaveBeenCalled();
+  });
+
+  // A cast that names no bitrate leaves the receiver on the cap of the cast
+  // before it: Max is said as the receiver's own ceiling.
+  test("hands the receiver its own ceiling under Max", async () => {
+    await play(MAX, "Chromecast");
+
+    expect(await castBitrate()).toBe(120_000_000);
+    expect(mockDetectBitrate).not.toHaveBeenCalled();
+  });
+
+  test("hands the receiver its own ceiling when Auto measures nothing", async () => {
+    mockDetectBitrate.mockRejectedValueOnce(new Error("nothing measured"));
+
+    await play(AUTO, "Chromecast");
+
+    expect(await castBitrate()).toBe(120_000_000);
+  });
+
+  // Live TV plays without a cap whatever the default quality: Auto never
+  // measures for it, a bitrate picked by hand still applies.
+  test("hands the receiver its own ceiling for live television under Auto", async () => {
+    await play(AUTO, "Chromecast", CHANNEL);
+
+    expect(await castBitrate()).toBe(120_000_000);
+    expect(mockDetectBitrate).not.toHaveBeenCalled();
+  });
+
+  test("hands the receiver a bitrate picked by hand for live television", async () => {
+    await play(EIGHT_MBPS, "Chromecast", CHANNEL);
+
+    expect(await castBitrate()).toBe(8_000_000);
+  });
+});
+
+// The link Auto measures is the phone's: handed 58 Mb/s, a Chromecast stick
+// froze on the segments the server copied for it, then errored (17/11/2026).
+describe("casting to a Chromecast stick", () => {
+  beforeEach(() => {
+    mockDevice = {
+      deviceId: "device-1",
+      friendlyName: "Living Room TV",
+      modelName: CHROMECAST_STICK_MODEL,
+    };
+  });
+
+  test("holds Auto at the stick's ceiling", async () => {
+    mockDetectBitrate.mockResolvedValueOnce(58_139_017);
+
+    await play(AUTO, "Chromecast");
+
+    expect(await castBitrate()).toBe(CHROMECAST_STICK_AUTO_MAX_BITRATE);
+  });
+
+  test("hands the stick a quality picked by hand above it as it is", async () => {
+    await play(EIGHT_MBPS, "Chromecast");
+
+    expect(await castBitrate()).toBe(8_000_000);
+  });
+
+  test("hands the stick its own ceiling for live television under Auto", async () => {
+    await play(AUTO, "Chromecast", CHANNEL);
+
+    expect(await castBitrate()).toBe(120_000_000);
+  });
+
+  test("hands another model the bitrate Auto measures", async () => {
+    mockDevice = {
+      deviceId: "device-1",
+      friendlyName: "Living Room TV",
+      modelName: "Google TV Streamer",
+    };
+    mockDetectBitrate.mockResolvedValueOnce(58_139_017);
+
+    await play(AUTO, "Chromecast");
+
+    expect(await castBitrate()).toBe(58_139_017);
+  });
+});
+
+// The settings were missing from the cast callback's dependencies (18/11/2026).
+// In the app the real playMedia is rebuilt on every settings change and hid
+// it; playMedia is a fixed double here, so only the button's own list counts.
+describe("Auto settings changed while the item page is open", () => {
+  test("measures with the ratio set after the page opened", async () => {
+    const selectedOptions = {
+      bitrate: AUTO,
+      mediaSource: SOURCE,
+      audioIndex: 1,
+      subtitleIndex: -1,
+    };
+    mockChoice = 0;
+    mockSettings = { showResumeDialog: false, autoBitrateRatio: 0.5 };
+    const page = await render(
+      <PlayButton item={MOVIE} selectedOptions={selectedOptions} />,
+    );
+
+    mockSettings = { showResumeDialog: false, autoBitrateRatio: 0.25 };
+    await page.rerender(
+      <PlayButton item={MOVIE} selectedOptions={selectedOptions} />,
+    );
+    await fireEvent.press(screen.getByLabelText("accessibility.play_button"));
+
+    await waitFor(() => expect(mockDetectBitrate).toHaveBeenCalled());
+    const [, , measuredWith] = mockDetectBitrate.mock.calls[0];
+    expect(measuredWith).toMatchObject({ ratio: 0.25 });
+  });
+});
+
+describe("playing on the device from the item page", () => {
+  // The player measures it when it negotiates the stream, for this item and
+  // for every one after it.
+  test("hands the player Auto as Auto", async () => {
+    await play(AUTO, "Device");
+
+    await waitFor(() =>
+      expect(mockPlayMedia).toHaveBeenCalledWith(
+        expect.objectContaining({ itemId: "movie-1", bitrateValue: "auto" }),
+        { item: MOVIE },
+      ),
+    );
+    expect(mockDetectBitrate).not.toHaveBeenCalled();
+  });
+
+  // Naming no quality would play at the default one.
+  test("hands the player Max as Max", async () => {
+    await play(MAX, "Device");
+
+    await waitFor(() =>
+      expect(mockPlayMedia).toHaveBeenCalledWith(
+        expect.objectContaining({ bitrateValue: "max" }),
+        { item: MOVIE },
+      ),
+    );
+  });
+});
+
+// The glyph is the whole cue: the pill used to also mount the library's Cast
+// button, transparent, as the Android discovery workaround. The module's
+// discovery needs no mounted button, and an invisible tap target in the pill
+// would open the Cast dialog instead of playing.
+test("a connected receiver shows the cast glyph and no native Cast button", async () => {
+  await render(<PlayButton item={MOVIE} selectedOptions={{} as never} />);
+  // The glyph's id is what the bench's flows wait for after picking a receiver.
+  expect(screen.getByTestId("play-button-cast")).toBeTruthy();
+  expect(screen.getByTestId("glyph-cast")).toBeTruthy();
+  expect(screen.queryByTestId("native-cast-button")).toBeNull();
+});
+
+test("without a receiver the pill carries the play glyph only", async () => {
+  mockClient = null;
+  await render(<PlayButton item={MOVIE} selectedOptions={{} as never} />);
+  expect(screen.getByTestId("glyph-play-circle")).toBeTruthy();
+  expect(screen.queryByTestId("play-button-cast")).toBeNull();
+});

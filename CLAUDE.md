@@ -58,13 +58,14 @@ Navigation:
 
 UI and headers:
 - `macos-header-buttons-fix` | macOS Catalyst: use RNGH LegacyPressable, not RN TouchableOpacity or the new RNGH Pressable
-- `header-button-locations` | Defined in _layout.tsx, HeaderBackButton, Chromecast, RoundButton, etc.
+- `header-button-locations` | Defined in _layout.tsx, HeaderBackButton, OutputButton, RoundButton, etc.
 - `stack-screen-header-configuration` | Sub-pages need explicit Stack.Screen with headerTransparent + back button
 - `switch-pointerevents-ignored` | Switch ignores its own pointerEvents (Android); wrap in a View pointerEvents="none"
 - `nativewind-classname-arrives-as-style` | a className passed to one of our own components reaches it as `style`; forward that, reading `className` drops it silently
 - `bottom-sheet-dismiss-before-present` | dismiss() on a BottomSheetModal that is not on screen leaves it unable to present, silently; follow `open` with useSheetOpenState
 - `sheets-draw-under-the-android-nav-bar` | use `@/hooks/useActionSheet`; `showModal` content goes in `SheetView` / `SheetScrollView`, a sheet's FlatList takes `useSheetContentPadding()`
 - `swiftui-host-dead-while-keyboard-is-up` | an @expo/ui Host honors the keyboard safe area, so a small one draws but takes no taps while a keyboard is up; set ignoreSafeArea='keyboard'
+- `accessibility-value-undefined-clears-label` | on Android an accessibilityValue that turns undefined wipes the whole content description, label included; keep it an object with a text
 
 State and data:
 - `use-network-aware-query-client-limitations` | Object.create breaks private fields; only for invalidateQueries
@@ -72,6 +73,7 @@ State and data:
 - `shared-value-js-write-lands-later` | a shared value set from JS is applied later on the UI thread, the next JS read still gets the old one; keep JS-only state in a ref
 - `jellyfin-unknown-parent-answers-400` | GET /Items with a parentId the server no longer has is a 400 "Error processing request.", not a 404; a renamed library has a new id, and the cache restores the old one for a day. Not reported nor retried, one WARN line in the local log
 - `unobserved-query-reports-its-first-failure` | a query whose key changed under it has no observer left, so React Query cancels its retries and its first failure goes to Sentry; one failing request and an instant event in the breadcrumbs is that
+- `jellyfin-ids-query-skips-library-access` | GET /Items?ids= returns items of libraries the user may not open (12.2); an id from Seerr, Streamystats or Marlin is checked with GET /Items/{id}, which answers 404 for those
 - `polling-query-rewrites-persisted-cache` | a persisted query with `refetchInterval` re-serializes the whole persisted cache every tick, even when its data never changes (`withoutRedundantSaves` only skips the ticks of queries that are not persisted); enable it only while a consumer is focused, with `gcTime: 0`
 
 Native modules:
@@ -82,7 +84,7 @@ Native modules:
 - `mpv-avfoundation-composite-osd-ordering` | MUST follow vo=avfoundation, before hwdec options
 - `thread-safe-state-for-stop-flags` | Stop flags need synchronous setter (stateQueue.sync not async)
 - `native-swiftui-view-sizing` | Need explicit frame + intrinsicContentSize override in ExpoView
-- `engine-agnostic-native-chrome` | The Android TV chrome consumes PlayerEngine; engine rides config.engine, resolvers split engine vs renderer
+- `engine-agnostic-native-chrome` | The native chrome holds a ChromeEngine (transport and queue faces, both platforms) and reaches rendering through a cast; the engine rides config.engine, an unknown one is refused at presentPlayer; resolvers split engine vs renderer; the phone chrome's controls follow ChromeCapabilities
 - `amlogic-dts-decoder-silent` | Amlogic's platform DTS decoder emits silence on DTS-HD without erroring; on bitstream-capable output DTS decode is steered to FFmpeg via dtsExcludingMediaCodecSelector (twin files)
 - `native-player-ignores-js-controls` | the iPhone/iPad default player is a presented native view controller; Controls.tsx and its hooks never mount there, so input (keyboard) needs a native counterpart
 - `download-failures-must-not-advance-the-queue` | An interrupted iOS download pauses in its queue slot and goes on on a network change, foreground or tap; failing through drained whole queues during VPN outages
@@ -97,6 +99,15 @@ Native modules:
 - `native-player-presented-after-dismiss` | iOS keeps the player session until the cross-dissolve ends, so present() right after onDismiss is refused; a new player waits for the closing one, and a swap whose player closed is dropped unless its stream ended and another item was asked for
 - `android17-background-audio-needs-media-fgs` | Android 17 mutes an app with no visible activity and no foreground service (`AudioHardening ... level: partial` in logcat); mpv stalls on the muted sink. The player screen holds the mediaPlayback service from MediaPlaybackController while it is open, paused included; a start refused in the background leaves it without one until the next play in front
 - `mpv-surface-loss-drops-video-track-and-seeks` | a detached surface fails mpv's VO, the video track is dropped and the refresh seek can restart at byte 0 of an unindexed MKV (20 s+ stall at 2h in); detachSurface attaches an offscreen ImageReader sink instead, on Android 10 and later only
+- `cast-discovery-needs-no-mounted-button` | Android Cast discovery is a MediaRouter callback in the module with CALLBACK_FLAG_REQUEST_DISCOVERY and CALLBACK_FLAG_PERFORM_ACTIVE_SCAN, paused in the background; no hidden MediaRouteButton, which the library needed
+- `sdk-expanded-controller-cast-button-is-ours` | the SDK's ExpandedControllerActivity has an empty toolbar; the Cast button (the only "Stop casting" there) is a menu the subclass inflates and wires with CastButtonFactory
+- `cast-resume-rebuilds-the-client` | a Cast resume hands a new media client and drops channel callbacks; register again on resume, never keep either across one. On iOS the resumed session object keeps its old channel and refuses a second, so the hub takes a port's channels off before it drops the port
+- `cast-session-id-goes-null-when-ended` | an ended Android CastSession answers null for its id, so an end matched against the live id matches nothing; keep the id the binding was made with
+- `cast-stop-from-tv-leaves-an-idle-status` | stopped from the TV, the session stays connected and the SDK keeps an idle status with its media, at position 0; play() does nothing there, send the item or queue again from your own position
+- `cast-switch-ends-the-old-session` | a receiver switch is two sessions: iOS startSession(with:) answers NO while one is established, so end it first; Android ends the old one with status 2155, the same code as a network loss, so only the request tells them apart; asked back, the old route is selected only on the turn after its end, or the SDK's cleanup selects the default route over it
+- `cast-launching-session-stops-the-receiver` | the session that launched the receiver app stops it at its end whatever stopCasting says, on both SDKs; only a joined session leaves the TV playing, so the stop reporter checks the receiver after a disconnect without stop
+- `cast-session-setters-freeze-android-volume` | on Android, CastSession.setVolume or setMute stops the session following the receiver; set the level through the MediaRouter route of the session's receiver, as the Cast dialog does, and mute the stream (the SDK's own toggle mutes the device); a fixed-volume receiver (a Google TV on HDMI-CEC) has no level to publish
+- `native-view-dies-with-a-recreated-activity` | a view added with addContentView stays on the old activity when the system recreates it (font size, display size, a background kill: not in configChanges); watch ON_DESTROY and close it
 
 TV platform:
 - `tv-modals-must-use-navigation-pattern` | Use atom+router.push(), never overlay/absolute modals
@@ -118,6 +129,7 @@ Build and tooling:
 - `expo-image-prebuilt-glide-logs` | Expo's prebuilt expo-image AAR ships with Glide logs on, every image URL (trickplay ApiKey included) reaches logcat; built from source instead
 - `repack-shrunk-resources-missing-attrs` | AGP 9's R8 resource shrinking leaves XML naming attributes it removed; apktool cannot relink them, so the Android repack declares them and builds again
 - `expo-prebuilt-modules-need-matching-rn` | the prebuilt ExpoModulesCore uses React core classes of the RN patch the SDK targets; expo-modules-core 58.0.30 on react-native-tvos 0.88.0-0 dies in dyld at every iOS launch while the build stays green
+- `new-swift-file-needs-pod-install` | a Swift file added to a local module joins its Pods target only after `pod install`; until then xcodebuild fails on the types it declares
 
 ## Project overview
 
@@ -157,7 +169,7 @@ bun run test:unit            # Jest, the whole suite
 bun run test:coverage        # Jest plus a coverage report in coverage/
 bun run perf                 # Reassure performance scenarios (*.perf-test.tsx)
 bun run perf:baseline        # Reassure baseline to compare `bun run perf` against
-bun run test                 # The full gate: typecheck, unit, lint, format, i18n, doctor
+bun run test                 # The full gate: typecheck, unit, e2e bench, lint, format, i18n, doctor
 
 # iOS specific
 bun run ios:install-metal-toolchain   # Fixes "missing Metal Toolchain" build errors
@@ -196,13 +208,13 @@ nix develop --command fastlane ios release target:ios dry_run:true   # target:io
 | `fastlane/` | Apple release lanes (build number, signing, TestFlight upload) |
 | `patches/` | Patch package overrides |
 | `augmentations/` | Type augmentations |
-| `test-utils/` | Shared test doubles: Jellyfin API, MMKV, the file system, custom headers, React Native, Reanimated, @expo/ui, drax |
-| `tests/native/` | Standalone native checks (subtitle geometry, app container paths), each run by its script in `scripts/ios/`, and subtitle playback fixtures |
+| `test-utils/` | Shared test doubles: Jellyfin API, MMKV, the file system, custom headers, React Native, Reanimated, @expo/ui, drax, the Cast module |
+| `tests/native/` | Standalone native checks (subtitle geometry, app container paths, the hero's Dynamic Type cap, the Cast mapping, the engine protocols, the receiver protocol, the receiver channel hub, the Cast engine, the native engine kind, the chrome capabilities, the remote target, the output sheet, the audio session's queues), each run by its script in `scripts/ios/`, and subtitle playback fixtures |
 | `translations/` | i18n catalogues, `en.json` is the only source |
 | `scripts/` | Repo tooling run through bun |
 | `biome-plugins/` | Custom Biome (Grit) lint rules, wired up in `biome.json` |
 | `docs/` | Conventions and deep dives |
-| `e2e/` | Manual end to end fixtures that need Docker, never run in CI (a local Jellyfin for SyncPlay) |
+| `e2e/` | End-to-end bench and suites (test server, devices, Cast sender, Maestro flows), see `e2e/README.md` |
 
 ## Key patterns
 
@@ -224,6 +236,9 @@ nix develop --command fastlane ios release target:ios dry_run:true   # target:io
 - Direct HTTP is reserved for endpoints outside the SDK: Streamyfin and
   intro-skipper plugins, Web's static configuration, configurable custom sections,
   and external services (Seerr, StreamyStats, Marlin, OpenSubtitles, Wikidata).
+  One SDK endpoint is the exception: Auto quality's speed test
+  (`utils/jellyfin/bitrateTest.ts`) times the body of `/Playback/BitrateTest` as it
+  streams in, through expo/fetch, which Axios cannot; it sends the same headers.
   The SDK itself uses Axios; keep its custom-header transport and error handling.
   Plugin requests use the explicitly named `pluginGet` / `pluginPost` /
   `pluginPut` / `pluginDelete` extensions, not generic `Api.get` / `post` /
@@ -287,7 +302,7 @@ PersistQueryClientProvider
 
 `JotaiProvider` and `ActionSheetProvider` wrap the tree higher up, at the root layout.
 
-**Native modules** in `modules/`: `mpv-player` (the native player, iOS and Android),
+**Native modules** in `modules/`: `mpv-player` (the native player and the Cast support, iOS and Android),
 `exoplayer-player`, `background-downloader`, `glass-poster`, `hero-carousel`,
 `notification-settings-link` (the iOS Settings link to the Notifications screen),
 `system-volume`, `top-shelf-cache`, `tv-recommendations`, `tv-search`, `tv-user-profile`,

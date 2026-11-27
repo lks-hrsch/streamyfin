@@ -1,9 +1,11 @@
 import { useAtomValue } from "jotai";
 import { useCallback, useEffect, useRef } from "react";
-import GoogleCast, {
+import { useInvalidatePlaybackProgressCache } from "@/hooks/useRevalidatePlaybackProgressCache";
+import {
+  onCastSessionEvent,
   useCastDevice,
-  useMediaStatus,
-} from "react-native-google-cast";
+  useCastMediaStatus,
+} from "@/modules/mpv-player/src/cast";
 import { apiAtom, userAtom } from "@/providers/JellyfinProvider";
 import {
   receiverNameFor,
@@ -21,12 +23,21 @@ interface LastCast {
 /**
  * Mounted once for the whole app: a cast can be stopped from the notification
  * or the native Cast dialog while no casting screen is open. Renders nothing.
+ * Once the stop is reported, the pages read the resume point again, as the
+ * phone's player has them do when it closes: an item page left open meanwhile
+ * still holds the one from before the cast, and its Play would send that.
  */
 export function JellyfinCastStopReporter() {
   const api = useAtomValue(apiAtom);
   const user = useAtomValue(userAtom);
   const castDevice = useCastDevice();
-  const mediaStatus = useMediaStatus();
+  const mediaStatus = useCastMediaStatus();
+  // A new function every render: the session listener reads the latest one.
+  const refreshProgress = useInvalidatePlaybackProgressCache();
+  const refreshProgressRef = useRef(refreshProgress);
+  useEffect(() => {
+    refreshProgressRef.current = refreshProgress;
+  }, [refreshProgress]);
 
   // The device and media status are already gone by the time the session has
   // ended, so the last values seen are kept for then.
@@ -66,15 +77,15 @@ export function JellyfinCastStopReporter() {
   );
 
   useEffect(() => {
-    const sessionManager = GoogleCast.getSessionManager();
+    const subscription = onCastSessionEvent(({ event, error, withoutStop }) => {
+      // A new cast on the same TV must not be stopped by a check left over from
+      // the previous session.
+      if (event === "starting") {
+        cancelPendingReport();
+        return;
+      }
+      if (event !== "ended") return;
 
-    // A new cast on the same TV must not be stopped by a check left over from
-    // the previous session.
-    const starting = sessionManager.onSessionStarting(() =>
-      cancelPendingReport(),
-    );
-
-    const ending = sessionManager.onSessionEnded((_session, error) => {
       const last = lastCast.current;
       lastCast.current = {};
       cancelPendingReport();
@@ -90,9 +101,11 @@ export function JellyfinCastStopReporter() {
         api,
         userId: user.Id,
         deviceName: last.deviceName,
-        // The SDK leaves `error` out only when casting was stopped, which
-        // closes the receiver app; anything else may leave the TV playing.
-        receiverClosed: !error,
+        // The module leaves `error` out for a stop, which closes the receiver
+        // app, and for a disconnect without stop, which closes it only when
+        // this session launched it: that one and any error may leave the TV
+        // playing, so the report first checks that the receiver went quiet.
+        receiverClosed: !error && !withoutStop,
         itemId: last.itemId,
         playSessionId: last.playSessionId,
         signal: controller.signal,
@@ -114,13 +127,17 @@ export function JellyfinCastStopReporter() {
           if (pendingReport.current === controller) {
             pendingReport.current = null;
           }
+          // After the report, which may be what writes the receiver's last position.
+          void refreshProgressRef.current().catch((refreshError) => {
+            logAndCaptureError(
+              "Cast: reading the resume points again failed",
+              refreshError,
+            );
+          });
         });
     });
 
-    return () => {
-      starting.remove();
-      ending.remove();
-    };
+    return () => subscription.remove();
   }, [api, user, cancelPendingReport]);
 
   return null;
