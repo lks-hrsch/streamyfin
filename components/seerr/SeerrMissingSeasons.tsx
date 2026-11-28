@@ -11,6 +11,7 @@ import {
   SeasonStatusGroup,
   SeasonStatusRow,
 } from "@/components/seerr/SeasonStatusRow";
+import { SeerrPendingRequest } from "@/components/seerr/SeerrPendingRequest";
 import { SeerrRequestIcon } from "@/components/seerr/SeerrRequestIcon";
 import {
   SeerrBadgeColors,
@@ -32,7 +33,8 @@ import { type MediaRequestBody, MediaType } from "@/utils/seerr/types";
 /**
  * The seasons of a library series that Seerr does not report as available,
  * each with where it stands there, and the Seerr page's own request sheet
- * (RequestModal) to ask for them. Nothing when there is nothing to tell.
+ * (RequestModal) to ask for them, and the decision on a request that waits
+ * (SeerrPendingRequest). Nothing when there is nothing to tell.
  */
 export const SeerrMissingSeasons: React.FC<{
   item: BaseItemDto;
@@ -41,6 +43,7 @@ export const SeerrMissingSeasons: React.FC<{
   const { t } = useTranslation();
   const {
     details,
+    title: seerrTitle,
     held,
     seasons,
     offersRequest,
@@ -49,7 +52,10 @@ export const SeerrMissingSeasons: React.FC<{
   const [requestBody, setRequestBody] = useState<MediaRequestBody>();
   const sheetRef = useRef<BottomSheetModalMethods>(null);
 
-  if (!details) return null;
+  // Nothing missing: a request that still waits is all there is to show.
+  if (!details) {
+    return <SeerrPendingRequest details={seerrTitle} className='px-4 mb-4' />;
+  }
 
   const title = item.Name ?? details.name;
 
@@ -111,6 +117,9 @@ export const SeerrMissingSeasons: React.FC<{
           </Text>
         </Button>
       )}
+      {/* A season asked for waits here for whoever decides, as it waited
+          on Seerr's page: the page this series opens on from Seerr too. */}
+      <SeerrPendingRequest details={details} className='mt-3' />
       <RequestModal
         ref={sheetRef}
         requestBody={requestBody}

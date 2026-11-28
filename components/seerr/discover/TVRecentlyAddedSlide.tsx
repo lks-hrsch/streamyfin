@@ -4,7 +4,7 @@ import { View } from "react-native";
 import { TVSeerrRow } from "@/components/seerr/discover/TVSeerrRow";
 import { TVSeerrPosterCard } from "@/components/tv/TVSeerrPosterCard";
 import { useScaledTVSizes } from "@/constants/TVSizes";
-import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import {
   useSeerrRecentlyAdded,
   useSeerrTitleDetails,
@@ -20,7 +20,7 @@ const TVRecentlyAddedCard: React.FC<{
   media: MediaInfo;
   hasTVPreferredFocus: boolean;
 }> = ({ media, hasTVPreferredFocus }) => {
-  const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const sizes = useScaledTVSizes();
 
   const { data: details } = useSeerrTitleDetails(media.mediaType, media.tmdbId);
@@ -32,10 +32,13 @@ const TVRecentlyAddedCard: React.FC<{
       item={{ ...details, mediaType: media.mediaType }}
       hasTVPreferredFocus={hasTVPreferredFocus}
       onPress={() =>
-        router.push({
-          pathname: "/(auth)/(tabs)/(search)/seerr/page",
-          params: { id: String(media.tmdbId), mediaType: media.mediaType },
-        })
+        openTitle(
+          { mediaType: media.mediaType, mediaInfo: media },
+          {
+            pathname: "/(auth)/(tabs)/(search)/seerr/page",
+            params: { id: String(media.tmdbId), mediaType: media.mediaType },
+          },
+        )
       }
     />
   );

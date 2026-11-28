@@ -2,13 +2,14 @@ import type { BaseItemDto } from "@jellyfin/sdk/lib/generated-client/models";
 
 /**
  * Which Jellyfin item carries the Seerr title an issue on `item` is filed
- * against: a movie is its own, an episode belongs to its series, whose item
- * holds the TMDB number. Undefined for anything Seerr takes no issue on.
+ * against: a movie and a series are their own, an episode belongs to its
+ * series, whose item holds the TMDB number. Undefined for anything Seerr
+ * takes no issue on.
  */
 export const issueTitleSource = (
   item: Pick<BaseItemDto, "Type" | "SeriesId"> | null | undefined,
 ): "self" | "series" | undefined => {
-  if (item?.Type === "Movie") return "self";
+  if (item?.Type === "Movie" || item?.Type === "Series") return "self";
   if (item?.Type === "Episode" && item.SeriesId) return "series";
   return undefined;
 };

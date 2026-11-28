@@ -62,6 +62,10 @@ jest.mock("@/components/series/SeriesHeader", () => ({
   },
 }));
 jest.mock("@/components/series/NextUp", () => ({ NextUp: () => null }));
+// Play and its issue report have their own spec (SeriesPlayRow.test.tsx).
+jest.mock("@/components/series/SeriesPlayRow", () => ({
+  SeriesPlayRow: () => null,
+}));
 // The page's missing seasons from Seerr (#20) load Seerr's client and request
 // sheet, whose imports reach the bottom sheet's native worklets. Without a
 // Seerr the row draws nothing, which is all this spec needs of it.

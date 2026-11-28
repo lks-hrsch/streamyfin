@@ -10,14 +10,16 @@ import { scaleSize } from "@/utils/scaleSize";
 
 interface Props {
   item: BaseItemDto;
+  /** Out of reach while a sheet of the page is up, as its neighbours are. */
+  disabled?: boolean;
 }
 
 /**
- * The TV's report issue entry on a library movie or episode: the Seerr page's
+ * The TV's report issue entry on a library movie, series or episode: the Seerr page's
  * sheet, in Seerr's issue yellow and sized as its neighbours in the row. Draws
  * nothing where Seerr would take no issue (see useLibraryIssue).
  */
-export function TVLibraryIssueButton({ item }: Props) {
+export function TVLibraryIssueButton({ item, disabled }: Props) {
   const target = useLibraryIssue(item);
   const { showIssueModal } = useTVIssueModal();
   const button = useRef<ViewInstance | null>(null);
@@ -38,6 +40,7 @@ export function TVLibraryIssueButton({ item }: Props) {
     <TVButton
       variant='warning'
       square
+      disabled={disabled}
       refSetter={setButton}
       onPress={() => showIssueModal({ ...target, onClose: restoreFocus })}
     >

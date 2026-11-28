@@ -17,3 +17,14 @@ export const getSeriesPlaybackTarget = (
   ) ??
   episodes.find((episode) => !episode.UserData?.Played) ??
   episodes[0];
+
+/**
+ * An episode as the series pages name it beside Play: S1:E3. Undefined for
+ * an episode the library has not numbered.
+ */
+export const episodeCode = (
+  episode: Pick<BaseItemDto, "ParentIndexNumber" | "IndexNumber">,
+): string | undefined =>
+  episode.ParentIndexNumber != null && episode.IndexNumber != null
+    ? `S${episode.ParentIndexNumber}:E${episode.IndexNumber}`
+    : undefined;

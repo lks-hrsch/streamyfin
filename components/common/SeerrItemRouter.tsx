@@ -2,7 +2,7 @@ import { useSegments } from "expo-router";
 import type React from "react";
 import { type PropsWithChildren } from "react";
 import { TouchableOpacity, type TouchableOpacityProps } from "react-native";
-import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import type {
   MovieDetails,
   MovieResult,
@@ -30,7 +30,7 @@ export const TouchableSeerrRouter: React.FC<PropsWithChildren<Props>> = ({
   children,
   ...props
 }) => {
-  const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const segments = useSegments();
 
   const from = (segments as string[])[2] || "(home)";
@@ -41,18 +41,26 @@ export const TouchableSeerrRouter: React.FC<PropsWithChildren<Props>> = ({
         onPress={() => {
           if (!result) return;
 
-          router.push({
-            pathname: `/(auth)/(tabs)/${from}/seerr/page`,
-            // @ts-expect-error
-            params: {
-              ...result,
-              mediaTitle,
-              releaseYear,
-              canRequest: canRequest.toString(),
-              posterSrc,
-              mediaType,
+          // A details answer carries no media type of its own: the card's.
+          openTitle(
+            {
+              mediaType:
+                ("mediaType" in result && result.mediaType) || mediaType,
+              mediaInfo: result.mediaInfo,
             },
-          });
+            {
+              pathname: `/(auth)/(tabs)/${from}/seerr/page`,
+              // @ts-expect-error
+              params: {
+                ...result,
+                mediaTitle,
+                releaseYear,
+                canRequest: canRequest.toString(),
+                posterSrc,
+                mediaType,
+              },
+            },
+          );
         }}
         {...props}
       >

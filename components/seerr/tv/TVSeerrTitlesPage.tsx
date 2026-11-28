@@ -8,7 +8,7 @@ import {
   TV_GRID_LOAD_MORE_DISTANCE,
   useScaledTVSizes,
 } from "@/constants/TVSizes";
-import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import {
   type SeerrTitlesSource,
   useSeerrDiscoverTitles,
@@ -26,7 +26,7 @@ export const TVSeerrTitlesPage: React.FC<{
 }> = ({ source, heading }) => {
   const insets = useSafeAreaInsets();
   const sizes = useScaledTVSizes();
-  const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const { titles, loadMore, isLoading } = useSeerrDiscoverTitles(source);
 
   return (
@@ -65,7 +65,7 @@ export const TVSeerrTitlesPage: React.FC<{
               item={item}
               hasTVPreferredFocus={index === 0}
               onPress={() =>
-                router.push({
+                openTitle(item, {
                   pathname: "/(auth)/(tabs)/(search)/seerr/page",
                   params: { id: String(item.id), mediaType: item.mediaType },
                 })

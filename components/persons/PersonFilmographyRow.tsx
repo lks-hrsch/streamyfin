@@ -11,9 +11,9 @@ import { getItemNavigation } from "@/components/common/TouchableItemRouter";
 import SeerrStatusIcon from "@/components/seerr/SeerrStatusIcon";
 import { Colors } from "@/constants/Colors";
 import useRouter from "@/hooks/useAppRouter";
+import { useOpenSeerrTitle } from "@/hooks/useOpenSeerrTitle";
 import { useSeerr } from "@/hooks/useSeerr";
 import { apiAtom } from "@/providers/JellyfinProvider";
-import { libraryItemOf } from "@/utils/seerr/libraryLinks";
 import { type FilmographyEntry, roleText } from "@/utils/seerr/personProfile";
 import { canRequest } from "@/utils/seerr/requests";
 
@@ -39,6 +39,7 @@ export const PersonFilmographyRow: React.FC<{
   const { t } = useTranslation();
   const api = useAtomValue(apiAtom);
   const router = useRouter();
+  const openTitle = useOpenSeerrTitle();
   const segments = useSegments();
   const from = (segments as string[])[2] || "(home)";
   const { seerrApi, seerrUser, getTitle, getYear } = useSeerr();
@@ -102,12 +103,7 @@ export const PersonFilmographyRow: React.FC<{
         return;
       }
       const { credit } = entry;
-      const inLibrary = libraryItemOf(credit);
-      if (inLibrary) {
-        router.push(getItemNavigation(inLibrary, from) as never);
-        return;
-      }
-      router.push({
+      openTitle(credit, {
         pathname: `/(auth)/(tabs)/${from}/seerr/page`,
         params: {
           id: String(credit.id),
@@ -122,7 +118,7 @@ export const PersonFilmographyRow: React.FC<{
         },
       } as never);
     },
-    [entryOf, from, router, seerrApi, seerrUser, getTitle, getYear],
+    [entryOf, from, router, openTitle, seerrApi, seerrUser, getTitle, getYear],
   );
 
   const slots = useMemo(

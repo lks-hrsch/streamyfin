@@ -21,7 +21,7 @@ interface Props {
 }
 
 /**
- * Reports an issue in Seerr from a library movie or episode, with the Seerr
+ * Reports an issue in Seerr from a library movie, series or episode, with the Seerr
  * page's sheet: round like the buttons beside Play, in Seerr's issue yellow.
  * Draws nothing where Seerr would take no issue (see useLibraryIssue).
  */
